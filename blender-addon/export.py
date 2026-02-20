@@ -194,4 +194,4 @@ def export_flex_final_standard(target_path):
     with open(target_path, 'w', encoding='utf-8') as f:
         json.dump(scene_data, f, separators=(',', ':'))
 
-export_flex_final_standard(r"C:\Conf-Engine3\assets\sample.json")
+export_flex_final_standard(r"C:\Conf-Engine\assets\sample.json")

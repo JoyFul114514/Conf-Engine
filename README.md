@@ -55,7 +55,7 @@
 ### 2. 技术参考与环境 (Environment & Reference)
 * **[glTF™ 参考](https://www.khronos.org/gltf/):** 核心扩展 **FlexGLTF** 的数据交换格式参考了 glTF™ (GL Transmission Format) 开放标准。本项目是针对 TurboWarp 环境优化的自定义实现。
 * **[TurboWarp](https://turbowarp.org/):** 本项目专为 TurboWarp 环境设计。**特此声明：TurboWarp 是一个独立的开源项目，不属于 Scratch 或 MIT。** 本项目利用了其高性能编译器及动态扩展加载能力。
-* **[Blender](https://www.blender.org/):** 本项目使用 Blender 进行 3D 建模与动画预处理。配套的 `flexgltf_export.py` 插件作为独立脚本运行于 Blender 环境下。
+* **[Blender](https://www.blender.org/):** 本项目使用 Blender 进行 3D 建模与动画预处理。配套的 `export.py` 插件作为独立脚本运行于 Blender 环境下。
 
 ### 3. 第三方扩展致谢 (Third-Party Credits)
 本项目集成了以下优秀的开源扩展，对原作者表示诚挚感谢：

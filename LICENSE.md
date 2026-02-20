@@ -20,6 +20,17 @@ This project is a modular 3D engine built for Scratch/TurboWarp. Please read the
   - `flexgltf_export.py` (Blender export add-on)
 - **Terms:** These files are "Weak Copyleft". If you modify these specific files, you MUST make the source code of your modifications available under MPL 2.0.
 
+## 2. Acknowledgement of Development Platforms & Tools (开发平台与工具声明)
+
+### TurboWarp
+- **Status:** Independent Open-Source Project.
+- **Statement:** This project is specifically designed to run on the TurboWarp platform. **TurboWarp is an independent open-source project and is NOT affiliated with, maintained by, or a part of Scratch or the Massachusetts Institute of Technology (MIT).** - **Relationship:** The .sb3 engine logic utilizes TurboWarp's high-performance compiler and dynamic extension loading capabilities.
+
+### Blender
+- **Status:** Open-Source 3D Creation Suite.
+- **Statement:** **Blender** (GPL licensed) is used as the primary 3D authoring environment for asset preparation. 
+- **Relationship:** The custom export script `flexgltf_export.py` included in this repository is an independent work created to interface with Blender's API. While the script runs within Blender, the source code of the script itself is licensed under the **Mozilla Public License 2.0 (MPL 2.0)**.
+
 ---
 
 ## 2. Third-Party Extension Credits (第三方扩展致谢)

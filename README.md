@@ -49,7 +49,7 @@
 ### 1. 授权说明 (Licensing)
 * **引擎逻辑 (.sb3):** 采用 **[MIT License](LICENSE.md)** 开源。包含所有在 TurboWarp 编辑器中编写的积木逻辑。您可以自由重混、分发及商用。
 * **核心扩展与插件:** 采用 **[Mozilla Public License 2.0 (MPL 2.0)](LICENSE.md)** 开源。
-    * 涉及文件：`Matrix.js` (矩阵运算)、`FlexGLTF.js` (3D 蒙皮骨骼动画解析器)、`flexgltf_export.py` (Blender 导出脚本)。
+    * 涉及文件：`Matrix.js` (矩阵运算)、`FlexGLTF.js` (3D 蒙皮骨骼动画解析器)、`export.py` (Blender 导出脚本)。
     * **核心要求：** 如果您修改了这些特定的源代码文件，**必须**以 MPL 2.0 协议公开您的修改。
 
 ### 2. 技术参考与环境 (Environment & Reference)

@@ -1,5 +1,5 @@
 /**
- * FlexGLTF Extension for Scratch ( v2.20.13.17 DEBUG )
+ * FlexGLTF Extension for Scratch ( v2.22.20.44 )
  * * This Source Code Form is subject to the terms of the Mozilla Public 
  * License, v. 2.0. If a copy of the MPL was not distributed with this 
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -109,9 +109,16 @@
                     { blockType: Scratch.BlockType.LABEL, text: "动画数据" },
                     { opcode: 'activateAnimation', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 激活动画 [NAME]', arguments: { MI: { type: 'number', defaultValue: 0 }, NAME: { type: 'string', defaultValue: 'Run' } } },
                     { opcode: 'setAnimationTime', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 设置激活动画时刻 [TIME]', arguments: { MI: { type: 'number', defaultValue: 0 }, TIME: { type: 'number', defaultValue: 0 } } },
-                    {opcode: 'hasAnimationTrack',blockType: Scratch.BlockType.BOOLEAN,text: '模型 [MI] 骨骼 [BI] 当前动画有轨道？',arguments: {MI: { type: 'number', defaultValue: 0 },BI: { type: 'number', defaultValue: 0 }}},
+                    { opcode: 'hasAnimationTrack',blockType: Scratch.BlockType.BOOLEAN,text: '模型 [MI] 骨骼 [BI] 当前动画有轨道？',arguments: {MI: { type: 'number', defaultValue: 0 },BI: { type: 'number', defaultValue: 0 }}},
                     { opcode: 'getActiveAnimMatrix', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 骨骼 [BI] 的激活动画增量矩阵', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 } } },
-                    { blockType: Scratch.BlockType.LABEL, text: "调试 v2.20.13.17 DEBUG" },
+                    { blockType: Scratch.BlockType.LABEL, text: "矩阵" }, // 列优先
+                    { opcode: 'identity', blockType: Scratch.BlockType.REPORTER, text: '单位矩阵' },
+                    { opcode: 'translate',blockType: Scratch.BlockType.REPORTER,text: '平移矩阵 x:[X] y:[Y] z:[Z]',arguments: { X: { type: 'number', defaultValue: 0 }, Y: { type: 'number', defaultValue: 0 }, Z: { type: 'number', defaultValue: 0 } }},
+                    { opcode: 'rotate',blockType: Scratch.BlockType.REPORTER,text: '旋转矩阵 [AXIS] 角度:[ANGLE]',arguments: {AXIS: { type: 'string', menu: 'axisMenu' },ANGLE: { type: 'number', defaultValue: 0 }}},
+                    { opcode: 'scale',blockType: Scratch.BlockType.REPORTER,text: '缩放矩阵 x:[X] y:[Y] z:[Z]',arguments: { X: { type: 'number', defaultValue: 1 }, Y: { type: 'number', defaultValue: 1 }, Z: { type: 'number', defaultValue: 1 } }},
+                    { opcode: 'multiply',blockType: Scratch.BlockType.REPORTER,text: '矩阵乘法 A:[A] * B:[B]',arguments: { A: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' }, B: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } }},
+                    { opcode: 'invert',blockType: Scratch.BlockType.REPORTER,text: '逆矩阵 [M]',arguments: { M: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } }},
+                    { blockType: Scratch.BlockType.LABEL, text: "调试 v2.22.20.36 DEBUG" },
                     { opcode: 'combineListToMatrixString', blockType: Scratch.BlockType.REPORTER, text: '合并列表 [LIST] 为矩阵字符串', arguments: { LIST: { type: 'string', defaultValue: 'list' } } },
                     { opcode: 'getDebugData', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 骨骼 [BI] 的 [DINFO]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, DINFO: { type: 'string', menu: 'debugMenu' } } }
                 ],
@@ -119,6 +126,7 @@
                     meshMenu: { items: ['name', 'material_name', 'texture_name', 'position', 'uv', 'bone_indices', 'bone_weights'] },
                     boneMenu: { items: ['bone_id', 'parent_index', 'original_matrix'] },
                     poseMenu: { items: ['当前', '初始'] },
+                    axisMenu: { acceptReporters: true, items: ['X', 'Y', 'Z'] },
                     debugMenu: { items: ['增量矩阵', '当前全局矩阵', '默认全局矩阵', '父级索引'] }
                 }
             };
@@ -281,6 +289,55 @@
         getModelIndex(args) { return modelOrder.indexOf(String(args.MID)); }
         flushModel(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.meshes.forEach(mesh => { mesh.geo = null; }); }
         clearAll() { models = {}; modelOrder = []; }
+
+        _parse(m) {
+            try {
+                if (typeof m === 'number') return this._getIdentity(); // 防止误传数字
+                const parsed = typeof m === 'string' ? JSON.parse(m) : m;
+                return (Array.isArray(parsed) && parsed.length === 16) ? parsed : this._getIdentity();
+            } catch (e) { return this._getIdentity(); }
+        }
+        _out(m) { return JSON.stringify(m.map(v => Math.abs(v) < 1e-7 ? 0 : Number(v.toFixed(6)))); }
+        _getIdentity() { return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; }
+
+        identity() { return this._out(this._getIdentity()); }
+
+        translate(args) {
+            const x = Number(args.X) || 0;
+            const y = Number(args.Y) || 0;
+            const z = Number(args.Z) || 0;
+            return this._out([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]);
+        }
+
+        rotate(args) {
+            const rad = (Number(args.ANGLE) || 0) * Math.PI / 180;
+            const s = Math.sin(rad), c = Math.cos(rad);
+            let m = this._getIdentity();
+            if (args.AXIS === 'X') m = [1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1];
+            else if (args.AXIS === 'Y') m = [c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1];
+            else m = [c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+            return this._out(m);
+        }
+
+        scale(args) {
+            const x = Number(args.X) || 1;
+            const y = Number(args.Y) || 1;
+            const z = Number(args.Z) || 1;
+            return this._out([x, 0, 0, 0, 0, y, 0, 0, 0, 0, z, 0, 0, 0, 0, 1]);
+        }
+
+        multiply(args) {
+            const a = this._parse(args.A);
+            const b = this._parse(args.B);
+            const out = m4.multiply(new Float32Array(a), new Float32Array(b));
+            return this._out(Array.from(out));
+        }
+
+        invert(args) {
+            const m = this._parse(args.M);
+            const inv = inverse(m);
+            return inv ? this._out(Array.from(inv)) : this.identity();
+        }
 
         getDebugData(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];

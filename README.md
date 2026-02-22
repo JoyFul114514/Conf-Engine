@@ -7,7 +7,7 @@
 
 ### 加载 & 绘制
 1. **导出模型：** 在 Blender 里导入 `flexgltf_export.py` 脚本，修改脚本最后一行的目录为你想要的导出目录。
-2. **场景准备：** 物体模式下按 `A` 全选场景，运行脚本，等待导出为 JSON 文件。
+2. **场景准备：** 物体模式下按 `A` 全选场景，运行脚本，等待导出为 JSON 文件。（⚠注意，请确保模型没有将所有网格合并，如果已合并，请按部件或材质拆分）
 3. **引擎配置：** 在 TurboWarp 的 GLTFLoader 中新建变量，通过文件扩展将该变量设置为导出的 JSON 内容。
 4. **加载积木：** 在广播 `Load` 下，使用 `Load from ( )` 自制积木，将变量拖入。
 5. **渲染执行：** 在 `Render` 的重复执行中添加 `Draw ( )` 积木，填入 JSON 的文件名。
@@ -49,15 +49,21 @@
 ### 1. 授权说明 (Licensing)
 * **引擎逻辑 (.sb3):** 采用 **[MIT License](LICENSE.md)** 开源。包含所有在 TurboWarp 编辑器中编写的积木逻辑。您可以自由重混、分发及商用。
 * **核心扩展与插件:** 采用 **[Mozilla Public License 2.0 (MPL 2.0)](LICENSE.md)** 开源。
-    * 涉及文件：`Matrix.js` (矩阵运算)、`FlexGLTF.js` (3D 蒙皮骨骼动画解析器)、`flexgltf_export.py` (Blender 导出脚本)。
+    * 涉及文件：`Matrix.js` (矩阵运算)、`FlexGLTF.js` (3D 蒙皮骨骼动画解析器)、`export.py` (Blender 导出脚本)。
     * **核心要求：** 如果您修改了这些特定的源代码文件，**必须**以 MPL 2.0 协议公开您的修改。
 
 ### 2. 技术参考与环境 (Environment & Reference)
 * **[glTF™ 参考](https://www.khronos.org/gltf/):** 核心扩展 **FlexGLTF** 的数据交换格式参考了 glTF™ (GL Transmission Format) 开放标准。本项目是针对 TurboWarp 环境优化的自定义实现。
 * **[TurboWarp](https://turbowarp.org/):** 本项目专为 TurboWarp 环境设计。**特此声明：TurboWarp 是一个独立的开源项目，不属于 Scratch 或 MIT。** 本项目利用了其高性能编译器及动态扩展加载能力。
-* **[Blender](https://www.blender.org/):** 本项目使用 Blender 进行 3D 建模与动画预处理。配套的 `flexgltf_export.py` 插件作为独立脚本运行于 Blender 环境下。
+* **[Blender](https://www.blender.org/):** 本项目使用 Blender 进行 3D 建模与动画预处理。配套的 `export.py` 插件作为独立脚本运行于 Blender 环境下。
 
-### 3. 第三方扩展致谢 (Third-Party Credits)
+### 4. 人工智能使用声明 (AI-Assisted Work Declaration)
+本项目遵循开发者原创原则，并借助人工智能工具进行了优化：
+* **核心逻辑：** 本项目的整体架构、引擎逻辑设计（.sb3 积木架构）以及 FlexGLTF 的核心实现均由本人独立完成。
+* **辅助修缮：** 在开发过程中，我借助了人工智能（Google Gemini）进行代码调试（DeBug）、语法润色以及部分法律声明文档的辅助撰写。
+* **最终审核：** 所有由 AI 生成或建议的内容均经过本人严格审核、修改与实机测试，确保其符合项目的技术规范与安全要求。
+
+### 4. 第三方扩展致谢 (Third-Party Credits)
 本项目集成了以下优秀的开源扩展，对原作者表示诚挚感谢：
 * **Simple3D Extension** - 作者：**Vadik1 (Xeltalliv)** [访问源码](https://extensions.turbowarp.org/Xeltalliv/simple3D.js)
 * **JSON Extension** - 作者：**Skyhigh173** 与 **Mio** [访问源码](https://extensions.turbowarp.org/Skyhigh173/json.js)

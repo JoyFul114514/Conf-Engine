@@ -1,9 +1,26 @@
-# Conf-Engine3
+# Conf-Engine
 面向 TurboWarp 的蒙皮骨骼动画引擎
 
 #Simple3D #TurboWarp #extension #Skeleton #Skin
 
-## 使用指南
+---
+
+## Conf Engine 4 使用指南
+
+### 加载 & 绘制
+3. **引擎配置：** 在 TurboWarp 的 GLTFLoader 中新建变量，通过文件扩展将该变量设置为data:URL形式导入的.glb文件。
+4. **加载积木：** 在广播 `Load` 下，使用 `Load from ( ) ( )` 自制积木，将变量拖入,并为其命名。
+5. **渲染执行：** 在 `Render` 的重复执行中添加 `Draw ( )` 积木，填入要渲染的模型的名称。
+6. 点击绿旗运行。
+
+### 骨骼 & 动画
+- **程序动画：** 在广播 `Animation` 下，使用 `设置模型( )骨骼( )局部矩阵( )` 积木来修改骨骼局部姿态。
+- **骨骼动画：** 使用 `Play Animation ( ) ( )` 播放预设动画。
+- **更新矩阵:** 修改局部矩阵后，需使用 `更新模型 ( ) 的骨骼层级继承计算` 来重新计算骨骼当前(current)绝对坐标系矩阵
+
+---
+
+## Conf Engine 3 使用指南
 
 ### 加载 & 绘制
 1. **导出模型：** 在 Blender 里导入 `flexgltf_export.py` 脚本，修改脚本最后一行的目录为你想要的导出目录。
@@ -49,7 +66,7 @@
 ### 1. 授权说明 (Licensing)
 * **引擎逻辑 (.sb3):** 采用 **[MIT License](LICENSE.md)** 开源。包含所有在 TurboWarp 编辑器中编写的积木逻辑。您可以自由重混、分发及商用。
 * **核心扩展与插件:** 采用 **[Mozilla Public License 2.0 (MPL 2.0)](LICENSE.md)** 开源。
-    * 涉及文件：`FlexGLTF.js` (3D 蒙皮骨骼动画解析器)、`export.py` (Blender 导出脚本)。
+    * 涉及文件：`FlexGLTF.js` (3D 蒙皮骨骼动画解析器)、`OmniGLB.js` (3D 蒙皮骨骼动画解析器)、`export.py` (Blender 导出脚本)。
     * **核心要求：** 如果您修改了这些特定的源代码文件，**必须**以 MPL 2.0 协议公开您的修改。
 
 ### 2. 技术参考与环境 (Environment & Reference)

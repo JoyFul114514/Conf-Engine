@@ -98,7 +98,7 @@
                 name: 'OmniGLB',
                 color1: '#7db4b2',
                 blocks: [
-                    { blockType: Scratch.BlockType.LABEL, text: "场景&内存 (原生加载内核)" },
+                    { blockType: Scratch.BlockType.LABEL, text: "场景&内存" },
                     { opcode: 'parseScene', blockType: Scratch.BlockType.COMMAND, text: '加载 GLB [STR] 命名为 [MID]', arguments: { STR: { type: 'string', defaultValue: '' }, MID: { type: 'string', defaultValue: 'model_1' } } },
                     { opcode: 'flushModel', blockType: Scratch.BlockType.COMMAND, text: '释放模型 [MI] 顶点缓存', arguments: { MI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'clearAll', blockType: Scratch.BlockType.COMMAND, text: '释放所有' },

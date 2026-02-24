@@ -18,6 +18,7 @@ This project is a modular 3D engine built for Scratch/TurboWarp. Please read the
 - **Applicable Files:**
   - `FlexGLTF.js`
   - `export.py`
+  - `OmniGLB.js`
 - **Terms:** These files are "Weak Copyleft". If you modify these specific files, you MUST make the source code of your modifications available under MPL 2.0.
 
 ## 2. Acknowledgement of Development Platforms & Tools (开发平台与工具声明)

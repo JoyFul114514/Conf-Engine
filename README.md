@@ -5,7 +5,7 @@
 
 ---
 
-## Conf Engine 4 使用指南
+## Conf Engine 4.1/4.2 使用指南
 
 ### 加载 & 绘制
 3. **引擎配置：** 在 TurboWarp 的 GLTFLoader 中新建变量，通过文件扩展将该变量设置为data:URL形式导入的.glb文件。
@@ -48,12 +48,16 @@
       * duration：该动画持续时间 tracks：动画槽
         * tracks是中是一系列的骨骼变换流，记录每一关键帧中姿态有改变的骨骼的索引、TRS以及时刻。姿态无变化的骨骼不会记录，以节省空间
 * **FlexGLTF扩展**：核心扩展，解析、句柄、计算、输出
-    * 读取json模型，保存场景网格信息
+    * 读取json文件，保存场景网格信息
     * FlexGLTF会遍历骨骼树，将骨骼的 初始(original)绝对坐标系矩阵、骨骼局部坐标系矩阵保存在内存中，并额外使用一部分内存存放一套 当前(current)绝对坐标系矩阵
     * scratch层会从FlexGLTF中读取网格信息，比如VBO，提交给SImple3D（GPU）。
     * FlexGLTF会单独提取出当前网格会用到的所有骨骼（为每个网格单独创建handles），把每个顶点在handles中用到的骨骼的索引作为bone_indices，调用 `set mesh ( ) bone indices` 上传给simple3D
     * 用户可以在渲染循环(renderLoop)中每帧修改骨骼的局部坐标系矩阵，并在修改后调用 `更新模型 ( ) 的骨骼层级继承计算` 积木。此积木会重新遍历骨骼树，对所有骨骼进行层次继承变换，并将计算好的结果写入内存中的 当前(current)绝对坐标系矩阵
     * 最后，在调用Simple3D的 `Draw Mesh（）` 之前，scratch层的积木会将调用 `set mesh ( ) current matrix` 把当前绝对坐标系矩阵，对每个网格挑取它们会用到的那部分，组成矩阵流上传。
+ 
+* **OmniGLB v1.2.0 扩展**：核心逻辑同FlexGLTF
+    * 不同点1：直接解析base64编码的.glb文件，读取场景节点、网格、骨骼、动画
+    * 不同点2：不再以Joint为基础，改为以Node为基础，可以轻松管理网格模型对象、计算网格之间的基础，并处理节点动画
 
 ---
 

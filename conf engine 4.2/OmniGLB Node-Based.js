@@ -3,7 +3,7 @@
 // Description: Better GLB loader (Node-based Workflow)
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.2.2 - Node-Based
+// Version: 1.2.3 - Node-Based
 
 (function (Scratch) {
     'use strict';
@@ -173,7 +173,6 @@
                 return result;
             }
         }
-
         parseScene(args) {
             try {
                 const mid = String(args.MID);
@@ -183,6 +182,8 @@
                 for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
                 const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
                 if (dv.getUint32(0, true) !== 0x46546C67) return;
+
+                //  解析 JSON 和 BIN chunk
                 let offset = 12, json = null, bin = null;
                 while (offset < bytes.length) {
                     const chunkLen = dv.getUint32(offset, true);
@@ -191,19 +192,30 @@
                     else if (chunkType === 0x004E4942) bin = bytes.buffer.slice(bytes.byteOffset + offset + 8, bytes.byteOffset + offset + 8 + chunkLen);
                     offset += 8 + chunkLen;
                 }
-
+                // 解析节点树 (Nodes)
                 const nodes = (json.nodes || []).map((n, i) => {
-                    let defT = n.translation ||[0, 0, 0], defR = n.rotation ||[0, 0, 0, 1], defS = n.scale || [1, 1, 1];
+                    let defT = n.translation || [0, 0, 0], defR = n.rotation || [0, 0, 0, 1], defS = n.scale || [1, 1, 1];
                     let bindLocal = n.matrix ? new Float32Array(n.matrix) : m4.fromRotationTranslation(defR, defT, defS);
                     const d = m4.decompose(bindLocal);
-                    return { name: n.name || `node_${i}`, parent: -1, bindLocal, defT: d.t, defR: d.r, defS: d.s, incrementLocal: m4.identity(), bindWorld: m4.identity(), invBindWorld: m4.identity(), skinMatrix: m4.identity(), world: m4.identity() };
+                    return {
+                        name: n.name || `node_${i}`,
+                        parent: -1,
+                        bindLocal,
+                        defT: d.t, defR: d.r, defS: d.s,
+                        incrementLocal: m4.identity(),
+                        bindWorld: m4.identity(),
+                        invBindWorld: m4.identity(),
+                        skinMatrix: m4.identity(),
+                        world: m4.identity(),
+                        meshIdx: n.mesh,
+                        skinIdx: n.skin
+                    };
                 });
 
-                (json.nodes ||[]).forEach((n, i) => { if (n.children) n.children.forEach(c => { if (nodes[c]) nodes[c].parent = i; }); });
+                (json.nodes || []).forEach((n, i) => { if (n.children) n.children.forEach(c => { if (nodes[c]) nodes[c].parent = i; }); });
 
-                const skinJoints = json.skins && json.skins.length > 0 ? json.skins[0].joints : [];
-
-                let calcOrder =[];
+                // 计算初始世界矩阵
+                let calcOrder = [];
                 let visited = new Uint8Array(nodes.length);
                 const visitNode = (idx) => { if (visited[idx]) return; visited[idx] = 1; if (nodes[idx].parent !== -1) visitNode(nodes[idx].parent); calcOrder.push(idx); };
                 for (let i = 0; i < nodes.length; i++) visitNode(i);
@@ -217,32 +229,24 @@
                     if (inv) n.invBindWorld.set(inv);
                 });
 
-                const meshes =[];
+                // 3. 解析几何体库
+                // 这里只解析数据，不关心它被谁用，也不关心刚体还是蒙皮
+                const geoLib = [];
                 (json.meshes || []).forEach((m, mIdx) => {
-                    (m.primitives ||[]).forEach((prim, pIdx) => {
-                        const idxs = this._getBuf(json, bin, prim.indices), rP = this._getBuf(json, bin, prim.attributes.POSITION), rU = this._getBuf(json, bin, prim.attributes.TEXCOORD_0), rI = this._getBuf(json, bin, prim.attributes.JOINTS_0), rW = this._getBuf(json, bin, prim.attributes.WEIGHTS_0);
-                        let p = [], u = [], bw =[], bi = [], handles =[], globalToLocalMap = new Map();
-                        const processVertex = (idx) => {
-                            if (rP) p.push(rP[idx * 3], rP[idx * 3 + 1], rP[idx * 3 + 2]);
-                            if (rU) u.push(rU[idx * 2], rU[idx * 2 + 1]);
-                            if (rI && rW && skinJoints.length > 0) {
-                                for (let j = 0; j < 4; j++) {
-                                    let rawJointLocalIdx = rI[idx * 4 + j], weight = rW[idx * 4 + j];
-                                    if (weight > 0) {
-                                        let globalNodeIdx = skinJoints[rawJointLocalIdx]; // 这里用 skinJoints 获取全局节点ID，仅针对顶点解析
-                                        if (!globalToLocalMap.has(globalNodeIdx)) { globalToLocalMap.set(globalNodeIdx, handles.length); handles.push(globalNodeIdx); }
-                                        bi.push(globalToLocalMap.get(globalNodeIdx));
-                                    } else { bi.push(0); }
-                                    bw.push(weight);
-                                }
-                            } else { bi.push(0, 0, 0, 0); bw.push(1, 0, 0, 0); if (handles.length === 0) handles.push(0); }
-                        };
-                        if (idxs) for (let i = 0; i < idxs.length; i++) processVertex(idxs[i]);
-                        else if (rP) for (let i = 0; i < rP.length / 3; i++) processVertex(i);
+                    const primitives = [];
+                    (m.primitives || []).forEach((prim, pIdx) => {
+                        const idxs = this._getBuf(json, bin, prim.indices);
+                        const rP = this._getBuf(json, bin, prim.attributes.POSITION);
+                        const rU = this._getBuf(json, bin, prim.attributes.TEXCOORD_0);
+                        const rI = this._getBuf(json, bin, prim.attributes.JOINTS_0);
+                        const rW = this._getBuf(json, bin, prim.attributes.WEIGHTS_0);
 
+                        // 材质纹理名
                         let texName = "None";
+                        let matName = "None";
                         if (prim.material !== undefined && json.materials) {
                             const matDef = json.materials[prim.material];
+                            matName = matDef.name || `Mat_${prim.material}`;
                             let texIdx = undefined;
                             if (matDef.pbrMetallicRoughness && matDef.pbrMetallicRoughness.baseColorTexture) texIdx = matDef.pbrMetallicRoughness.baseColorTexture.index;
                             else { const deep = (obj) => { if (!obj || typeof obj !== 'object') return; if (obj.index !== undefined && typeof obj.index === 'number') { texIdx = obj.index; return; } for (let k in obj) { deep(obj[k]); if (texIdx !== undefined) return; } }; deep(matDef); }
@@ -254,10 +258,86 @@
                                 }
                             }
                         }
-                        meshes.push({ name: m.name || `Mesh_${mIdx}_${pIdx}`, mat: (json.materials && json.materials[prim.material] ? json.materials[prim.material].name : "None") || `Mat_${prim.material}`, tex: texName, handles, geo: { position: p, uv: u, node_indices: bi, node_weights: bw } });
-                    });
-                });
 
+                        // 展开顶点数据
+                        let p = [], u = [], rawIndices = [], rawWeights = [];
+                        const processVertex = (idx) => {
+                            if (rP) p.push(rP[idx * 3], rP[idx * 3 + 1], rP[idx * 3 + 2]);
+                            if (rU) u.push(rU[idx * 2], rU[idx * 2 + 1]);
+                            // 这里只存储原始的 Joint Index (0-3)，真正的 Node ID 映射在实例化阶段做
+                            if (rI && rW) {
+                                for (let j = 0; j < 4; j++) {
+                                    rawIndices.push(rI[idx * 4 + j]);
+                                    rawWeights.push(rW[idx * 4 + j]);
+                                }
+                            } else {
+                                // 刚体默认数据
+                                rawIndices.push(0, 0, 0, 0);
+                                rawWeights.push(1, 0, 0, 0);
+                            }
+                        };
+                        if (idxs) for (let i = 0; i < idxs.length; i++) processVertex(idxs[i]);
+                        else if (rP) for (let i = 0; i < rP.length / 3; i++) processVertex(i);
+
+                        primitives.push({
+                            name: m.name || `Mesh_${mIdx}_Prim_${pIdx}`,
+                            mat: matName,
+                            tex: texName,
+                            p, u, rawIndices, rawWeights,
+                            isSkinnedData: !!(rI && rW)
+                        });
+                    });
+                    geoLib.push(primitives);
+                });
+                // 遍历节点，如果节点有 Mesh 就生成一个渲染实例
+                const renderables = [];
+
+                nodes.forEach((node, nIdx) => {
+                    if (node.meshIdx !== undefined && geoLib[node.meshIdx]) {
+                        // 该节点引用了一个 Mesh，Mesh 可能包含多个 Primitive
+                        const primitives = geoLib[node.meshIdx];
+
+                        primitives.forEach((geo, pIdx) => {
+                            let handles = [];
+                            let finalIndices = [];
+                            if (node.skinIdx !== undefined && json.skins && json.skins[node.skinIdx]) {
+                                // 蒙皮网格
+                                // 获取全局 Joint 列表
+                                const joints = json.skins[node.skinIdx].joints;
+
+                                // handles 就是 joints (GLTF spec: JOINTS_0 对应 skin.joints 数组的索引)
+                                handles = joints;
+
+                                // 顶点数据中的 rawIndices 不需要修改，直接对应 skin.joints 的下标
+                                finalIndices = geo.rawIndices;
+
+                            } else {
+                                // 刚体网格
+                                // 只有一个 Handle，就是当前节点自己
+                                handles = [nIdx];
+
+                                // 顶点数据全是 0，指向 handles[0]
+                                // geo.rawIndices 已经是全 0 了，直接用
+                                finalIndices = geo.rawIndices;
+                            }
+
+                            renderables.push({
+                                name: `${node.name}_${geo.name}`, // 节点名_网格名
+                                mat: geo.mat,
+                                tex: geo.tex,
+                                geo: {
+                                    position: geo.p,
+                                    uv: geo.u,
+                                    node_indices: finalIndices,
+                                    node_weights: geo.rawWeights
+                                },
+                                handles: handles,
+                                nodeIndex: nIdx, // 记录父级节点
+                                isSkinned: node.skinIdx !== undefined
+                            });
+                        });
+                    }
+                });
                 const animations = {};
                 if (json.animations) {
                     json.animations.forEach((anim, aIdx) => {
@@ -274,70 +354,44 @@
                         });
 
                         const bakedDeltaTracks = {};
-
                         for (let nId in nodeTracksMap) {
                             const raw = nodeTracksMap[nId];
                             const n = nodes[nId];
-
-                            const allTimes = Array.from(new Set([
-                                ...(raw.t ? raw.t.times : []),
-                                ...(raw.r ? raw.r.times :[]),
-                                ...(raw.s ? raw.s.times :[])
-                            ])).sort((a, b) => a - b);
-
+                            const allTimes = Array.from(new Set([...(raw.t ? raw.t.times : []), ...(raw.r ? raw.r.times : []), ...(raw.s ? raw.s.times : [])])).sort((a, b) => a - b);
                             if (allTimes.length === 0) continue;
 
                             const sample = (track, time, def, comps) => {
                                 if (!track) return def;
-                                let i = 0;
-                                while (i < track.times.length - 2 && time >= track.times[i + 1]) i++;
+                                let i = 0; while (i < track.times.length - 2 && time >= track.times[i + 1]) i++;
                                 let alpha = (track.times[i + 1] > track.times[i]) ? (time - track.times[i]) / (track.times[i + 1] - track.times[i]) : 0;
                                 if (comps === 4) return m4.slerp(track.values.subarray(i * 4, i * 4 + 4), track.values.subarray((i + 1) * 4, (i + 1) * 4 + 4), alpha);
                                 return m4.lerp(track.values.subarray(i * 3, i * 3 + 3), track.values.subarray((i + 1) * 3, (i + 1) * 3 + 3), alpha);
                             };
-
-                            const firstTime = allTimes[0];
-                            const baseT = sample(raw.t, firstTime, n.defT, 3);
-                            const baseR = sample(raw.r, firstTime, n.defR, 4);
-                            const baseS = sample(raw.s, firstTime, n.defS, 3);
-
-                            const baseMat = m4.fromRotationTranslation(baseR, baseT, baseS);
+                            const baseMat = m4.fromRotationTranslation(n.defR, n.defT, n.defS);
                             const invBaseMat = inverse(baseMat) || m4.identity();
-
-                            const deltaT = new Float32Array(allTimes.length * 3);
-                            const deltaR = new Float32Array(allTimes.length * 4);
-
+                            const deltaT = new Float32Array(allTimes.length * 3), deltaR = new Float32Array(allTimes.length * 4), deltaS = new Float32Array(allTimes.length * 3);
                             allTimes.forEach((time, idx) => {
-                                const currentT = sample(raw.t, time, n.defT, 3);
-                                const currentR = sample(raw.r, time, n.defR, 4);
-                                const currentS = sample(raw.s, time, n.defS, 3);
+                                const currentT = sample(raw.t, time, n.defT, 3), currentR = sample(raw.r, time, n.defR, 4), currentS = sample(raw.s, time, n.defS, 3);
                                 const currentMat = m4.fromRotationTranslation(currentR, currentT, currentS);
                                 const deltaMat = m4.multiply(invBaseMat, currentMat);
                                 const d = m4.decompose(deltaMat);
-
-                                const cleanT = d.t.map(v => Math.abs(v) < 1e-6 ? 0 : v);
-                                const cleanR = d.r.map((v, i) => Math.abs(v - (i === 3 ? 1 : 0)) < 1e-6 ? (i === 3 ? 1 : 0) : v);
-
-                                deltaT.set(cleanT, idx * 3);
-                                deltaR.set(cleanR, idx * 4);
+                                deltaT.set(d.t.map(v => Math.abs(v) < 1e-6 ? 0 : v), idx * 3);
+                                deltaR.set(d.r.map((v, i) => Math.abs(v - (i === 3 ? 1 : 0)) < 1e-6 ? (i === 3 ? 1 : 0) : v), idx * 4);
+                                deltaS.set(d.s, idx * 3);
                             });
-
-                            bakedDeltaTracks[nId] = {
-                                times: new Float32Array(allTimes),
-                                t: deltaT,
-                                r: deltaR
-                            };
+                            bakedDeltaTracks[nId] = { times: new Float32Array(allTimes), t: deltaT, r: deltaR, s: deltaS };
                         }
                         let duration = 0; for (let k in bakedDeltaTracks) duration = Math.max(duration, bakedDeltaTracks[k].times[bakedDeltaTracks[k].times.length - 1]);
                         animations[anim.name || `Anim_${aIdx}`] = { bakedDeltaTracks, duration };
                     });
                 }
-                // 移除了nodeToBoneMap
-                models[mid] = { meshes, nodes, calcOrder, animations, activeAnim: "", activeTime: 0 };
+
+                // meshes 改成 renderables 了
+                models[mid] = { renderables, nodes, calcOrder, animations, activeAnim: "", activeTime: 0 };
                 if (!modelOrder.includes(mid)) modelOrder.push(mid);
+
             } catch (e) { console.error("GLB 加载失败:", e); }
         }
-
         getActiveAnimMatrix(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             const nIdx = Math.floor(args.BI); // 直接转为全局节点Index
@@ -355,22 +409,29 @@
 
             const t = m4.lerp(track.t.subarray(i * 3, i * 3 + 3), track.t.subarray((i + 1) * 3, (i + 1) * 3 + 3), alpha);
             const r = m4.slerp(track.r.subarray(i * 4, i * 4 + 4), track.r.subarray((i + 1) * 4, (i + 1) * 4 + 4), alpha);
+            let s = [1, 1, 1];
+            if (track.s) {
+                s = m4.lerp(track.s.subarray(i * 3, i * 3 + 3), track.s.subarray((i + 1) * 3, (i + 1) * 3 + 3), alpha);
+            }
 
-            return JSON.stringify(this._lp(m4.fromRotationTranslation(r, t, [1, 1, 1])));
+            return JSON.stringify(this._lp(m4.fromRotationTranslation(r, t, s)));
         }
 
         getMeshInfo(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
-            if (!m || !m.meshes[args.MSI]) return "";
-            const mesh = m.meshes[args.MSI];
-            if (args.INFO === 'name') return mesh.name;
-            if (args.INFO === 'material_name') return mesh.mat;
-            if (args.INFO === 'texture_name') return mesh.tex;
+            // 现在的 MSI (Mesh Sub Index) 实际上是 Renderable Index
+            if (!m || !m.renderables[args.MSI]) return "";
+            const r = m.renderables[args.MSI];
+
+            if (args.INFO === 'name') return r.name;
+            if (args.INFO === 'material_name') return r.mat;
+            if (args.INFO === 'texture_name') return r.tex;
+
             let infoKey = args.INFO;
             if (infoKey === 'bone_indices') infoKey = 'node_indices';
             if (infoKey === 'bone_weights') infoKey = 'node_weights';
 
-            const data = mesh.geo ? mesh.geo[infoKey] : null;
+            const data = r.geo ? r.geo[infoKey] : null;
             if (Array.isArray(data) || data instanceof Float32Array) return JSON.stringify(this._lp(data));
             return data || "[]";
         }
@@ -402,14 +463,39 @@
 
         getSkinningMatrices(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
-            if (!m || !m.meshes[args.MSI]) return "[]";
-            let out =[];
-            // 此处的 handles 是由 parseScene 中的 skinJoints 换算出的全局节点 Index
-            m.meshes[args.MSI].handles.forEach(idx => {
+            if (!m || !m.renderables[args.MSI]) return "[]";
+
+            const r = m.renderables[args.MSI];
+            let out = [];
+
+            // r.handles 存储了影响该 Mesh 的所有节点 ID
+            // 对于刚体，handles 只有一个，就是它自己的节点 ID
+            // 对于蒙皮，handles 是 joints 列表
+
+            r.handles.forEach(idx => {
                 const node = m.nodes[idx];
-                const mat = (args.TYPE === '初始' || args.TYPE === 'original') ? m4.multiply(node.bindWorld, node.invBindWorld) : node.skinMatrix; // 我改了菜单，怕老版本（“初始"）不兼容
+                let mat;
+
+                if (r.isSkinned) {
+                    // 蒙皮 SkinMatrix (World * InvBind)
+                    // GLB 规范中，Node Transform 已经包含在 Skin 计算链中（如果它是骨骼层级的一部分）
+                    if (args.TYPE === '初始' || args.TYPE === 'original') {
+                        mat = m4.multiply(node.bindWorld, node.invBindWorld);
+                    } else {
+                        mat = node.skinMatrix;
+                    }
+                } else {
+                    // 刚体 (Rigid)
+                    // 矩阵就是该节点的 World Matrix
+                    if (args.TYPE === '初始' || args.TYPE === 'original') {
+                        mat = node.bindWorld;
+                    } else {
+                        mat = node.world;
+                    }
+                }
                 out.push(...Array.from(mat));
             });
+
             return JSON.stringify(this._lp(out));
         }
 
@@ -441,13 +527,12 @@
             return !!m.animations[m.activeAnim].bakedDeltaTracks[nIdx]; // 任何属于该动画的节点轨都可以被直接检测到
         }
 
-        getMeshCount(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.meshes.length : 0; }
-        getMeshIndex(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.meshes.findIndex(mesh => mesh.name === String(args.MN)) : -1; }
-        
+        getMeshCount(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.renderables.length : 0; }
+        getMeshIndex(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.renderables.findIndex(r => r.name === String(args.MN)) : -1; }        
         getModelCount() { return modelOrder.length; }
         getModelID(args) { return modelOrder[Math.floor(args.MI)] || ""; }
         getModelIndex(args) { return modelOrder.indexOf(String(args.MID)); }
-        flushModel(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.meshes.forEach(mesh => { mesh.geo = null; }); }
+        flushModel(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.renderables.forEach(r => { r.geo = null; }); }
         clearAll() { models = {}; modelOrder =[]; }
 
         _parse(m) { try { return (typeof m === 'string' ? JSON.parse(m) : m) ||[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; } catch (e) { return[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; } }

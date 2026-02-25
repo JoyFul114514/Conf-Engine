@@ -3,7 +3,7 @@
 // Description: Better GLB loader (Node-based Workflow)
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.2.0 - Node-Based
+// Version: 1.2.2 - Node-Based
 
 (function (Scratch) {
     'use strict';
@@ -114,7 +114,7 @@
                     // 改了id，老版本用不了了 ：）
                     { opcode: 'setNodePose', blockType: Scratch.BlockType.COMMAND, text: '设置模型 [MI] 节点 [BI] 局部矩阵 [MAT]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, MAT: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } } },
                     { opcode: 'updateHierarchy', blockType: Scratch.BlockType.COMMAND, text: '更新模型 [MI] 的节点层级继承计算', arguments: { MI: { type: 'number', defaultValue: 0 } } },
-                    { opcode: 'getSkinningMatrices', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格 [MSI] 的 [TYPE] 绑定节点矩阵流', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'poseMenu', defaultValue: '当前' } } },
+                    { opcode: 'getSkinningMatrices', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格 [MSI] 的 [TYPE] 绑定节点矩阵流', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'poseMenu', defaultValue: 'current' } } },
                     { blockType: Scratch.BlockType.LABEL, text: "节点数据" },
                     { opcode: 'getNodeCount', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 的节点总数', arguments: { MI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'getNodeInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 的 [INFO]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, INFO: { type: 'string', menu: 'nodeMenu' } } },
@@ -136,8 +136,8 @@
                 ],
                 menus: {
                     meshMenu: { items:['name', 'material_name', 'texture_name', 'position', 'uv', 'node_indices', 'node_weights'] },
-                    nodeMenu: { items:['node_id', 'parent_index', 'original_matrix'] },
-                    poseMenu: { items:['当前', '初始'] },
+                    nodeMenu: { items:['node_id', 'parent_index', 'pose_matrix', 'original_matrix', 'current_matrix'] },
+                    poseMenu: { items:['current', 'original'] },
                     axisMenu: { acceptReporters: true, items:['X', 'Y', 'Z'] },
                     debugMenu: { items:['增量矩阵', '当前全局矩阵', '默认全局矩阵', '父级索引'] }
                 }
@@ -330,7 +330,7 @@
                         animations[anim.name || `Anim_${aIdx}`] = { bakedDeltaTracks, duration };
                     });
                 }
-                // 移除了不再需要的 nodeToBoneMap
+                // 移除了nodeToBoneMap
                 models[mid] = { meshes, nodes, calcOrder, animations, activeAnim: "", activeTime: 0 };
                 if (!modelOrder.includes(mid)) modelOrder.push(mid);
             } catch (e) { console.error("GLB 加载失败:", e); }
@@ -405,7 +405,7 @@
             // 此处的 handles 是由 parseScene 中的 skinJoints 换算出的全局节点 Index
             m.meshes[args.MSI].handles.forEach(idx => {
                 const node = m.nodes[idx];
-                const mat = (args.TYPE === '初始' || args.TYPE === '默认') ? m4.multiply(node.bindWorld, node.invBindWorld) : node.skinMatrix;
+                const mat = (args.TYPE === '初始' || args.TYPE === 'original') ? m4.multiply(node.bindWorld, node.invBindWorld) : node.skinMatrix; // 我改了菜单，怕老版本（“初始"）不兼容
                 out.push(...Array.from(mat));
             });
             return JSON.stringify(this._lp(out));
@@ -421,9 +421,11 @@
             const nIdx = Math.floor(args.BI); // 取全局节点 Index
             if (!m || !m.nodes || nIdx < 0 || nIdx >= m.nodes.length) return "";
             const n = m.nodes[nIdx];
+            if (args.INFO === 'pose_matrix') return n.incrementLocal;
             if (args.INFO === 'original_matrix') return JSON.stringify(this._lp(n.bindWorld));
+            if (args.INFO === 'current_matrix') return JSON.stringify(this._lp(n.world));
             if (args.INFO === 'bone_id' || args.INFO === 'node_id') return n.name;
-            // 因为现在使用的是节点工作流，直接返回真实的父级全局节点ID，不再需要映射转义
+            // 现在使用的是节点工作流，直接返回真实的父级全局节点ID，不再需要映射转义
             if (args.INFO === 'parent_index') return n.parent !== undefined ? n.parent : -1;
             return "";
         }

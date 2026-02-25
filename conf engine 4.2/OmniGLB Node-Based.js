@@ -3,7 +3,7 @@
 // Description: Better GLB loader (Node-based Workflow)
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.1.2 - Node-Based
+// Version: 1.2.0 - Node-Based
 
 (function (Scratch) {
     'use strict';

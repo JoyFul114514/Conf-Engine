@@ -105,7 +105,7 @@
                     { blockType: Scratch.BlockType.LABEL, text: "索引映射" },
                     { opcode: 'getModelCount', blockType: Scratch.BlockType.REPORTER, text: '总模型数' },
                     { opcode: 'getModelID', blockType: Scratch.BlockType.REPORTER, text: '索引 [MI] 的模型 ID', arguments: { MI: { type: 'number', defaultValue: 0 } } },
-                    { opcode: 'getModelIndex', blockType: Scratch.BlockType.REPORTER, text: 'ID [MID] 的模型索引', arguments: { MID: { type: 'string', defaultValue: 'model_1' } } },
+                    { opcode: 'getModelIndex', blockType: Scratch.BlockType.REPORTER, text: 'ID [MID] 的模型索引', arguments: { MID: { type: 'string', defaultValue: 'model' } } },
                     { opcode: 'getMeshIndex', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 中网格名为 [MN] 的索引', arguments: { MI: { type: 'number', defaultValue: 0 }, MN: { type: 'string', defaultValue: '' } } },
                     { blockType: Scratch.BlockType.LABEL, text: "网格数据" },
                     { opcode: 'getMeshCount', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 的网格数量', arguments: { MI: { type: 'number', defaultValue: 0 } } },
@@ -129,7 +129,9 @@
                     { opcode: 'rotate', blockType: Scratch.BlockType.REPORTER, text: '旋转矩阵 [AXIS] 角度:[ANGLE]', arguments: { AXIS: { type: 'string', menu: 'axisMenu' }, ANGLE: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'scale', blockType: Scratch.BlockType.REPORTER, text: '缩放矩阵 x:[X] y:[Y] z:[Z]', arguments: { X: { type: 'number', defaultValue: 1 }, Y: { type: 'number', defaultValue: 1 }, Z: { type: 'number', defaultValue: 1 } } },
                     { opcode: 'multiply', blockType: Scratch.BlockType.REPORTER, text: '矩阵乘法 A:[A] * B:[B]', arguments: { A: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' }, B: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } } },
+                    { opcode: 'decompose', blockType: Scratch.BlockType.REPORTER, text: '矩阵分解 [M]', arguments: { M: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } } },
                     { opcode: 'invert', blockType: Scratch.BlockType.REPORTER, text: '逆矩阵 [M]', arguments: { M: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } } },
+                    { opcode: 'matrixToEulerDegrees', blockType: Scratch.BlockType.REPORTER, text: '欧拉角 [M]', arguments: { M: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } } },
                     { blockType: Scratch.BlockType.LABEL, text: "调试工具" },
                     { opcode: 'combineListToMatrixString', blockType: Scratch.BlockType.REPORTER, text: '合并列表 [LIST] 为字符串', arguments: { LIST: { type: 'string', defaultValue: 'list' } } },
                     { opcode: 'getDebugData', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 的 [DINFO]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, DINFO: { type: 'string', menu: 'debugMenu' } } }
@@ -432,7 +434,6 @@
 
         activateAnimation(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.activeAnim = String(args.NAME); }
         setAnimationTime(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.activeTime = Number(args.TIME); }
-        
         hasAnimationTrack(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             const nIdx = Math.floor(args.BI);
@@ -442,11 +443,13 @@
 
         getMeshCount(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.meshes.length : 0; }
         getMeshIndex(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.meshes.findIndex(mesh => mesh.name === String(args.MN)) : -1; }
+        
         getModelCount() { return modelOrder.length; }
         getModelID(args) { return modelOrder[Math.floor(args.MI)] || ""; }
         getModelIndex(args) { return modelOrder.indexOf(String(args.MID)); }
         flushModel(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.meshes.forEach(mesh => { mesh.geo = null; }); }
         clearAll() { models = {}; modelOrder =[]; }
+
         _parse(m) { try { return (typeof m === 'string' ? JSON.parse(m) : m) ||[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; } catch (e) { return[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; } }
         _out(m) { return JSON.stringify(m.map(v => Math.abs(v) < 1e-7 ? 0 : Number(v.toFixed(6)))); }
         identity() { return "[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]"; }
@@ -460,7 +463,31 @@
         scale(args) { return this._out([Number(args.X) || 1, 0, 0, 0, 0, Number(args.Y) || 1, 0, 0, 0, 0, Number(args.Z) || 1, 0, 0, 0, 0, 1]); }
         multiply(args) { return this._out(Array.from(m4.multiply(new Float32Array(this._parse(args.A)), new Float32Array(this._parse(args.B))))); }
         invert(args) { const inv = inverse(this._parse(args.M)); return inv ? this._out(Array.from(inv)) : this.identity(); }
-        
+        decompose(args) { const m = this._parse(args.M); const { t, r, s } = m4.decompose(new Float32Array(m)); return this._out([...t, ...r, ...s]); }
+        matrixToEulerDegrees(args) {
+            const m = this._parse(args.M);
+            if (!m || m.length < 16) return this._out([0, 0, 0]);
+            // 四元数
+            const { r } = m4.decompose(new Float32Array(m));
+            const x = r[0], y = r[1], z = r[2], w = r[3];
+            const radToDeg = 180 / Math.PI;
+            // 欧拉角 (ZYX)
+            const roll = Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)); // X
+            let pitch; // Y
+            const sinp = 2 * (w * y - z * x);
+            if (Math.abs(sinp) >= 1) {
+                pitch = (Math.PI / 2) * Math.sign(sinp);
+            } else {
+                pitch = Math.asin(sinp);
+            }
+            const yaw = Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)); // Z
+            return this._out([
+                roll * radToDeg,
+                pitch * radToDeg,
+                yaw * radToDeg
+            ]);
+        }
+        combineListToMatrixString(args, util) { const list = util.target.lookupVariableByNameAndType(args.LIST, 'list'); if (!list) return "[]"; return JSON.stringify(list.value.map(v => { try { return JSON.parse(v); } catch (e) { return v; } })); }
         getDebugData(args) {
             const m = models[modelOrder[Math.floor(args.MI)]], nIdx = Math.floor(args.BI);
             if (!m || !m.nodes || nIdx < 0 || nIdx >= m.nodes.length) return "[]"; // 确保全局节点安全

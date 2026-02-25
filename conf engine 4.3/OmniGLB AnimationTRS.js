@@ -1,0 +1,551 @@
+// Name: OmniGLB
+// ID: omniGLB
+// Description: Better GLB loader (TRS Interface + Node-Based Precision)
+// By: Joy_Ful <https://github.com/JoyFul114514>
+// License: MPL-2.0 AND BSD-3-Clause
+// Version: 1.3.2 - Animation TRS
+
+(function (Scratch) {
+    'use strict';
+
+    // === Math Helpers ===
+    const D2R = Math.PI / 180;
+    const R2D = 180 / Math.PI;
+
+    function multiply(a, b) {
+        const out = new Float32Array(16);
+        const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3], a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7], a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11], a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
+        let b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3];
+        out[0] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30; out[1] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31; out[2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32; out[3] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+        b0 = b[4]; b1 = b[5]; b2 = b[6]; b3 = b[7];
+        out[4] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30; out[5] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31; out[6] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32; out[7] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+        b0 = b[8]; b1 = b[9]; b2 = b[10]; b3 = b[11];
+        out[8] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30; out[9] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31; out[10] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32; out[11] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+        b0 = b[12]; b1 = b[13]; b2 = b[14]; b3 = b[15];
+        out[12] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30; out[13] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31; out[14] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32; out[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+        return out;
+    }
+
+    function inverse(m) {
+        const out = new Float32Array(16);
+        const m00 = m[0], m01 = m[1], m02 = m[2], m03 = m[3], m10 = m[4], m11 = m[5], m12 = m[6], m13 = m[7], m20 = m[8], m21 = m[9], m22 = m[10], m23 = m[11], m30 = m[12], m31 = m[13], m32 = m[14], m33 = m[15];
+        const b00 = m00 * m11 - m01 * m10, b01 = m00 * m12 - m02 * m10, b02 = m00 * m13 - m03 * m10, b03 = m01 * m12 - m02 * m11, b04 = m01 * m13 - m03 * m11, b05 = m02 * m13 - m03 * m12, b06 = m20 * m31 - m21 * m30, b07 = m20 * m32 - m22 * m30, b08 = m20 * m33 - m23 * m30, b09 = m21 * m32 - m22 * m31, b10 = m21 * m33 - m23 * m31, b11 = m22 * m33 - m23 * m32;
+        let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+        if (!det) return null; det = 1.0 / det;
+        out[0] = (m11 * b11 - m12 * b10 + m13 * b09) * det; out[1] = (m02 * b10 - m01 * b11 - m03 * b09) * det; out[2] = (m31 * b05 - m32 * b04 + m33 * b03) * det; out[3] = (m22 * b04 - m21 * b05 - m23 * b03) * det;
+        out[4] = (m12 * b08 - m10 * b11 - m13 * b07) * det; out[5] = (m00 * b11 - m02 * b08 + m03 * b07) * det; out[6] = (m32 * b02 - m30 * b11 - m33 * b01) * det; out[7] = (m20 * b11 - m22 * b02 + m23 * b01) * det;
+        out[8] = (m10 * b10 - m11 * b08 + m13 * b06) * det; out[9] = (m01 * b08 - m00 * b10 - m03 * b06) * det; out[10] = (m30 * b10 - m31 * b02 + m33 * b00) * det; out[11] = (m21 * b02 - m20 * b10 - m23 * b00) * det;
+        out[12] = (m11 * b07 - m10 * b09 - m12 * b06) * det; out[13] = (m00 * b09 - m01 * b07 + m02 * b06) * det; out[14] = (m31 * b01 - m30 * b05 - m32 * b00) * det; out[15] = (m20 * b05 - m21 * b01 + m22 * b00) * det;
+        return out;
+    }
+
+    const m4 = {
+        identity: () => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
+        multiply: multiply,
+        slerp: (a, b, t) => {
+            let ax = a[0], ay = a[1], az = a[2], aw = a[3];
+            let bx = b[0], by = b[1], bz = b[2], bw = b[3];
+            let cosom = ax * bx + ay * by + az * bz + aw * bw;
+            if (cosom < 0) { cosom = -cosom; bx = -bx; by = -by; bz = -bz; bw = -bw; }
+            let s0, s1;
+            if (1.0 - cosom > 0.000001) {
+                let omega = Math.acos(cosom), sinom = Math.sin(omega);
+                s0 = Math.sin((1.0 - t) * omega) / sinom; s1 = Math.sin(t * omega) / sinom;
+            } else { s0 = 1.0 - t; s1 = t; }
+            return new Float32Array([s0 * ax + s1 * bx, s0 * ay + s1 * by, s0 * az + s1 * bz, s0 * aw + s1 * bw]);
+        },
+        lerp: (a, b, t) => new Float32Array([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2])]),
+        fromRotationTranslation: (q, t, s, out) => {
+            if (!out) out = new Float32Array(16);
+            const x = q[0], y = q[1], z = q[2], w = q[3];
+            const x2 = x + x, y2 = y + y, z2 = z + z;
+            const xx = x * x2, xy = x * y2, xz = x * z2, yy = y * y2, yz = y * z2, zz = z * z2;
+            const wx = w * x2, wy = w * y2, wz = w * z2;
+
+            const sx = s ? s[0] : 1;
+            const sy = s ? s[1] : 1;
+            const sz = s ? s[2] : 1;
+
+            out[0] = (1 - (yy + zz)) * sx; out[1] = (xy + wz) * sx; out[2] = (xz - wy) * sx; out[3] = 0;
+            out[4] = (xy - wz) * sy; out[5] = (1 - (xx + zz)) * sy; out[6] = (yz + wx) * sy; out[7] = 0;
+            out[8] = (xz + wy) * sz; out[9] = (yz - wx) * sz; out[10] = (1 - (xx + yy)) * sz; out[11] = 0;
+            out[12] = t[0]; out[13] = t[1]; out[14] = t[2]; out[15] = 1;
+            return out;
+        },
+        decompose: (m) => {
+            const sx = Math.hypot(m[0], m[1], m[2]);
+            const sy = Math.hypot(m[4], m[5], m[6]);
+            const sz = Math.hypot(m[8], m[9], m[10]);
+            const t = [m[12], m[13], m[14]];
+            let r = [0, 0, 0, 1];
+            if (sx > 1e-5 && sy > 1e-5 && sz > 1e-5) {
+                const r00 = m[0] / sx, r01 = m[1] / sx, r02 = m[2] / sx, r10 = m[4] / sy, r11 = m[5] / sy, r12 = m[6] / sy, r20 = m[8] / sz, r21 = m[9] / sz, r22 = m[10] / sz;
+                const trace = r00 + r11 + r22;
+                if (trace > 0) { const S = Math.sqrt(trace + 1.0) * 2; r[3] = 0.25 * S; r[0] = (r12 - r21) / S; r[1] = (r20 - r02) / S; r[2] = (r01 - r10) / S; }
+                else if (r00 > r11 && r00 > r22) { const S = Math.sqrt(1.0 + r00 - r11 - r22) * 2; r[3] = (r12 - r21) / S; r[0] = 0.25 * S; r[1] = (r01 + r10) / S; r[2] = (r20 + r02) / S; }
+                else if (r11 > r22) { const S = Math.sqrt(1.0 + r11 - r00 - r22) * 2; r[3] = (r20 - r02) / S; r[0] = (r01 + r10) / S; r[1] = 0.25 * S; r[2] = (r12 + r21) / S; }
+                else { const S = Math.sqrt(1.0 + r22 - r00 - r11) * 2; r[3] = (r01 - r10) / S; r[0] = (r20 + r02) / S; r[1] = (r12 + r21) / S; r[2] = 0.25 * S; }
+            }
+            return { t, r, s: [sx, sy, sz] };
+        },
+        eulerToQuat: (x, y, z) => {
+            const c1 = Math.cos(x / 2), c2 = Math.cos(y / 2), c3 = Math.cos(z / 2);
+            const s1 = Math.sin(x / 2), s2 = Math.sin(y / 2), s3 = Math.sin(z / 2);
+            return new Float32Array([
+                s1 * c2 * c3 + c1 * s2 * s3,
+                c1 * s2 * c3 - s1 * c2 * s3,
+                c1 * c2 * s3 + s1 * s2 * c3,
+                c1 * c2 * c3 - s1 * s2 * s3
+            ]);
+        },
+        quatToEuler: (q) => {
+            const x = q[0], y = q[1], z = q[2], w = q[3];
+            const x2 = x + x, y2 = y + y, z2 = z + z;
+            const xx = x * x2, xy = x * y2, xz = x * z2, yy = y * y2, yz = y * z2, zz = z * z2;
+            const wx = w * x2, wy = w * y2, wz = w * z2;
+
+            const sinr_cosp = 2 * (w * x + y * z);
+            const cosr_cosp = 1 - 2 * (x * x + y * y);
+            const roll_x = Math.atan2(sinr_cosp, cosr_cosp);
+
+            const sinp_val = 2 * (w * y - z * x);
+            const pitch_y = Math.abs(sinp_val) >= 1 ? Math.sign(sinp_val) * Math.PI / 2 : Math.asin(sinp_val);
+
+            const siny_cosp = 2 * (w * z + x * y);
+            const cosy_cosp = 1 - 2 * (y * y + z * z);
+            const yaw_z = Math.atan2(siny_cosp, cosy_cosp);
+
+            return [roll_x * R2D, pitch_y * R2D, yaw_z * R2D];
+        }
+    };
+
+    let models = {};
+    let modelOrder = [];
+
+    class OmniGLB {
+        _lp(v) {
+            if (v instanceof Float32Array || v instanceof Uint16Array || v instanceof Uint8Array || Array.isArray(v)) {
+                return Array.from(v).map(x => Math.round(x * 1000000) / 1000000);
+            }
+            return Math.round(v * 1000000) / 1000000;
+        }
+
+        getInfo() {
+            return {
+                id: 'omniGLB',
+                name: 'OmniGLB',
+                color1: '#7db4b2',
+                blocks: [
+                    { blockType: Scratch.BlockType.LABEL, text: "场景&内存" },
+                    { opcode: 'parseScene', blockType: Scratch.BlockType.COMMAND, text: '加载 GLB [STR] 命名为 [MID]', arguments: { STR: { type: 'string', defaultValue: '' }, MID: { type: 'string', defaultValue: 'model_1' } } },
+                    { opcode: 'flushModel', blockType: Scratch.BlockType.COMMAND, text: '释放模型 [MI] 顶点缓存', arguments: { MI: { type: 'number', defaultValue: 0 } } },
+                    { opcode: 'clearAll', blockType: Scratch.BlockType.COMMAND, text: '释放所有' },
+                    { blockType: Scratch.BlockType.LABEL, text: "索引映射" },
+                    { opcode: 'getModelCount', blockType: Scratch.BlockType.REPORTER, text: '总模型数' },
+                    { opcode: 'getModelID', blockType: Scratch.BlockType.REPORTER, text: '索引 [MI] 的模型 ID', arguments: { MI: { type: 'number', defaultValue: 0 } } },
+                    { opcode: 'getModelIndex', blockType: Scratch.BlockType.REPORTER, text: 'ID [MID] 的模型索引', arguments: { MID: { type: 'string', defaultValue: 'model' } } },
+                    { opcode: 'getMeshIndex', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 中网格名为 [MN] 的索引', arguments: { MI: { type: 'number', defaultValue: 0 }, MN: { type: 'string', defaultValue: '' } } },
+                    { blockType: Scratch.BlockType.LABEL, text: "节点变换" },
+                    { opcode: 'setNodeTransform', blockType: Scratch.BlockType.COMMAND, text: '模型[MI] 节点[BI] 设置 [TYPE] X:[X] Y:[Y] Z:[Z]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'trsSetMenu' }, X: { type: 'number', defaultValue: 0 }, Y: { type: 'number', defaultValue: 0 }, Z: { type: 'number', defaultValue: 0 } } },
+                    { opcode: 'getNodeTransform', blockType: Scratch.BlockType.REPORTER, text: '获取模型[MI] 节点[BI] 的 [TYPE]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'trsGetMenu' } } },
+                    { opcode: 'updateHierarchy', blockType: Scratch.BlockType.COMMAND, text: '更新模型 [MI] 的节点变换', arguments: { MI: { type: 'number', defaultValue: 0 } } },
+                    { blockType: Scratch.BlockType.LABEL, text: "节点信息" },
+                    { opcode: 'getNodeCount', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 的节点总数', arguments: { MI: { type: 'number', defaultValue: 0 } } },
+                    { opcode: 'getNodeInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 的 [INFO]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, INFO: { type: 'string', menu: 'nodeMenu' } } },
+                    { blockType: Scratch.BlockType.LABEL, text: "网格数据" },
+                    { opcode: 'getMeshCount', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 的网格数量', arguments: { MI: { type: 'number', defaultValue: 0 } } },
+                    { opcode: 'getMeshInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格 [MSI] 的 [INFO]', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, INFO: { type: 'string', menu: 'meshMenu' } } },
+                    { opcode: 'getSkinningMatrices', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格 [MSI] 的 [TYPE] 绑定矩阵', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'poseMenu', defaultValue: 'current' } } },
+                    { blockType: Scratch.BlockType.LABEL, text: "动画控制" },
+                    { opcode: 'activateAnimation', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 激活动画 [NAME]', arguments: { MI: { type: 'number', defaultValue: 0 }, NAME: { type: 'string', defaultValue: 'Run' } } },
+                    { opcode: 'setAnimationTime', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 设置激活动画时刻 [TIME]', arguments: { MI: { type: 'number', defaultValue: 0 }, TIME: { type: 'number', defaultValue: 0 } } },
+                    { opcode: 'hasAnimationTrack', blockType: Scratch.BlockType.BOOLEAN, text: '模型 [MI] 节点 [BI] 当前动画有轨道？', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 } } },
+                    { opcode: 'getActiveAnimInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 激活动画的 [TYPE]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'animInfoMenu' } } },
+                    { blockType: Scratch.BlockType.LABEL, text: "高级" },
+                    { opcode: 'matrixToEulerDegrees', blockType: Scratch.BlockType.REPORTER, text: '矩阵转欧拉角 [M]', arguments: { M: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } } },
+                    { opcode: 'setNodePose', blockType: Scratch.BlockType.COMMAND, text: '设置节点 [BI] 矩阵 [MAT]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, MAT: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } } }
+                ],
+                menus: {
+                    trsSetMenu: { items: ['位置', '旋转', '缩放'] },
+                    trsGetMenu: { items: ['位置', '旋转', '缩放', '矩阵'] },
+                    animInfoMenu: { items: ['位置', '旋转', '缩放', '矩阵'] },
+                    nodeMenu: { items: ['node_id', 'parent_index', 'current_matrix'] },
+                    meshMenu: { items: ['name', 'material_name', 'texture_name', 'position', 'uv', 'node_indices', 'node_weights'] },
+                    poseMenu: { items: ['current', 'original'] },
+                    debugMenu: { items: ['增量矩阵', '当前全局矩阵', '默认全局矩阵', '父级索引'] }
+                }
+            };
+        }
+        _getBuf(json, bin, accessorIdx) {
+            if (accessorIdx === undefined || accessorIdx === null) return null;
+            const acc = json.accessors[accessorIdx];
+            const bvIdx = acc.bufferView !== undefined ? acc.bufferView : null;
+            let offset = acc.byteOffset || 0;
+            let stride = 0;
+            if (bvIdx !== null) { const bv = json.bufferViews[bvIdx]; offset += (bv.byteOffset || 0); stride = bv.byteStride || 0; }
+            const comps = { 'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16 }[acc.type] || 1;
+            const count = acc.count * comps;
+            const TypedArray = { 5120: Int8Array, 5121: Uint8Array, 5122: Int16Array, 5123: Uint16Array, 5125: Uint32Array, 5126: Float32Array }[acc.componentType];
+            if (!TypedArray) return null;
+            if (stride === 0 || stride === comps * TypedArray.BYTES_PER_ELEMENT) { return new TypedArray(bin, offset, count); }
+            else {
+                const result = new TypedArray(count);
+                const dataView = new DataView(bin);
+                for (let i = 0; i < acc.count; i++) {
+                    const elOffset = offset + i * stride;
+                    for (let j = 0; j < comps; j++) {
+                        const byteOffset = elOffset + j * TypedArray.BYTES_PER_ELEMENT;
+                        if (acc.componentType === 5126) result[i * comps + j] = dataView.getFloat32(byteOffset, true);
+                        else if (acc.componentType === 5123) result[i * comps + j] = dataView.getUint16(byteOffset, true);
+                        else if (acc.componentType === 5121) result[i * comps + j] = dataView.getUint8(byteOffset);
+                    }
+                }
+                return result;
+            }
+        }
+        parseScene(args) {
+            try {
+                const mid = String(args.MID);
+                const b64 = args.STR.split(',').pop();
+                const binStr = atob(b64);
+                const bytes = new Uint8Array(binStr.length);
+                for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+                const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+                if (dv.getUint32(0, true) !== 0x46546C67) return;
+
+                let offset = 12, json = null, bin = null;
+                while (offset < bytes.length) {
+                    const chunkLen = dv.getUint32(offset, true);
+                    const chunkType = dv.getUint32(offset + 4, true);
+                    if (chunkType === 0x4E4F534A) json = JSON.parse(new TextDecoder().decode(bytes.subarray(offset + 8, offset + 8 + chunkLen)));
+                    else if (chunkType === 0x004E4942) bin = bytes.buffer.slice(bytes.byteOffset + offset + 8, bytes.byteOffset + offset + 8 + chunkLen);
+                    offset += 8 + chunkLen;
+                }
+
+                const nodes = (json.nodes || []).map((n, i) => {
+                    let defT = n.translation || [0, 0, 0];
+                    let defR = n.rotation || [0, 0, 0, 1];
+                    let defS = n.scale || [1, 1, 1];
+
+                    if (n.matrix) {
+                        const d = m4.decompose(new Float32Array(n.matrix));
+                        defT = d.t; defR = d.r; defS = d.s;
+                    }
+
+                    const bindLocal = m4.fromRotationTranslation(defR, defT, defS);
+
+                    return {
+                        name: n.name || `node_${i}`,
+                        parent: -1,
+                        defT, defR, defS,
+                        bindLocal,
+                        // TRS
+                        rtT: Float32Array.from(defT),
+                        rtR: Float32Array.from(defR),
+                        rtS: Float32Array.from(defS),
+                        // Matrix Cache
+                        bindWorld: m4.identity(),
+                        invBindWorld: m4.identity(),
+                        skinMatrix: m4.identity(),
+                        world: m4.identity(),
+
+                        meshIdx: n.mesh,
+                        skinIdx: n.skin
+                    };
+                });
+
+                (json.nodes || []).forEach((n, i) => { if (n.children) n.children.forEach(c => { if (nodes[c]) nodes[c].parent = i; }); });
+
+                let calcOrder = [];
+                let visited = new Uint8Array(nodes.length);
+                const visitNode = (idx) => { if (visited[idx]) return; visited[idx] = 1; if (nodes[idx].parent !== -1) visitNode(nodes[idx].parent); calcOrder.push(idx); };
+                for (let i = 0; i < nodes.length; i++) visitNode(i);
+
+                calcOrder.forEach(idx => {
+                    const n = nodes[idx];
+                    if (n.parent === -1) n.bindWorld.set(n.bindLocal);
+                    else n.bindWorld.set(m4.multiply(nodes[n.parent].bindWorld, n.bindLocal));
+                    n.world.set(n.bindWorld);
+                    const inv = inverse(n.bindWorld);
+                    if (inv) n.invBindWorld.set(inv);
+                });
+
+                const geoLib = [];
+                (json.meshes || []).forEach((m, mIdx) => {
+                    const primitives = [];
+                    (m.primitives || []).forEach((prim, pIdx) => {
+                        const idxs = this._getBuf(json, bin, prim.indices);
+                        const rP = this._getBuf(json, bin, prim.attributes.POSITION);
+                        const rU = this._getBuf(json, bin, prim.attributes.TEXCOORD_0);
+                        const rI = this._getBuf(json, bin, prim.attributes.JOINTS_0);
+                        const rW = this._getBuf(json, bin, prim.attributes.WEIGHTS_0);
+                        let texName = "None";
+                        let matName = "None";
+                        if (prim.material !== undefined && json.materials) {
+                            const matDef = json.materials[prim.material];
+                            matName = matDef.name || `Mat_${prim.material}`;
+                            let texIdx = undefined;
+                            if (matDef.pbrMetallicRoughness && matDef.pbrMetallicRoughness.baseColorTexture) texIdx = matDef.pbrMetallicRoughness.baseColorTexture.index;
+                            else { const deep = (obj) => { if (!obj || typeof obj !== 'object') return; if (obj.index !== undefined && typeof obj.index === 'number') { texIdx = obj.index; return; } for (let k in obj) { deep(obj[k]); if (texIdx !== undefined) return; } }; deep(matDef); }
+                            if (texIdx !== undefined && json.textures && json.textures[texIdx]) {
+                                const tex = json.textures[texIdx];
+                                if (tex.source !== undefined && json.images && json.images[tex.source]) {
+                                    const img = json.images[tex.source];
+                                    texName = img.name || tex.name || (img.uri && !img.uri.startsWith('data:') ? img.uri.split('/').pop().split('.')[0] : `Texture_${texIdx}`);
+                                }
+                            }
+                        }
+                        let p = [], u = [], rawIndices = [], rawWeights = [];
+                        const processVertex = (idx) => {
+                            if (rP) p.push(rP[idx * 3], rP[idx * 3 + 1], rP[idx * 3 + 2]);
+                            if (rU) u.push(rU[idx * 2], rU[idx * 2 + 1]);
+                            if (rI && rW) {
+                                for (let j = 0; j < 4; j++) {
+                                    rawIndices.push(rI[idx * 4 + j]);
+                                    rawWeights.push(rW[idx * 4 + j]);
+                                }
+                            } else {
+                                rawIndices.push(0, 0, 0, 0);
+                                rawWeights.push(1, 0, 0, 0);
+                            }
+                        };
+                        if (idxs) for (let i = 0; i < idxs.length; i++) processVertex(idxs[i]);
+                        else if (rP) for (let i = 0; i < rP.length / 3; i++) processVertex(i);
+                        primitives.push({
+                            name: m.name || `Mesh_${mIdx}_Prim_${pIdx}`,
+                            mat: matName,
+                            tex: texName,
+                            p, u, rawIndices, rawWeights,
+                            isSkinnedData: !!(rI && rW)
+                        });
+                    });
+                    geoLib.push(primitives);
+                });
+
+                const renderables = [];
+                nodes.forEach((node, nIdx) => {
+                    if (node.meshIdx !== undefined && geoLib[node.meshIdx]) {
+                        const primitives = geoLib[node.meshIdx];
+                        primitives.forEach((geo, pIdx) => {
+                            let handles = [], finalIndices = [];
+                            if (node.skinIdx !== undefined && json.skins && json.skins[node.skinIdx]) {
+                                handles = json.skins[node.skinIdx].joints;
+                                finalIndices = geo.rawIndices;
+                            } else {
+                                handles = [nIdx];
+                                finalIndices = geo.rawIndices;
+                            }
+                            renderables.push({
+                                name: `${node.name}_${geo.name}`,
+                                mat: geo.mat,
+                                tex: geo.tex,
+                                geo: { position: geo.p, uv: geo.u, node_indices: finalIndices, node_weights: geo.rawWeights },
+                                handles: handles,
+                                nodeIndex: nIdx,
+                                isSkinned: node.skinIdx !== undefined
+                            });
+                        });
+                    }
+                });
+
+                const animations = {};
+                if (json.animations) {
+                    json.animations.forEach((anim, aIdx) => {
+                        const nodeTracksMap = {};
+                        anim.channels.forEach(ch => {
+                            if (!nodeTracksMap[ch.target.node]) nodeTracksMap[ch.target.node] = { t: null, r: null, s: null };
+                            const sampler = anim.samplers[ch.sampler];
+                            const times = this._getBuf(json, bin, sampler.input), values = this._getBuf(json, bin, sampler.output);
+                            if (times && values) {
+                                if (ch.target.path === 'translation') nodeTracksMap[ch.target.node].t = { times, values };
+                                else if (ch.target.path === 'rotation') nodeTracksMap[ch.target.node].r = { times, values };
+                                else if (ch.target.path === 'scale') nodeTracksMap[ch.target.node].s = { times, values };
+                            }
+                        });
+                        const bakedTracks = {};
+                        for (let nId in nodeTracksMap) {
+                            const raw = nodeTracksMap[nId];
+                            const n = nodes[nId];
+                            const allTimes = Array.from(new Set([...(raw.t ? raw.t.times : []), ...(raw.r ? raw.r.times : []), ...(raw.s ? raw.s.times : [])])).sort((a, b) => a - b);
+                            if (allTimes.length === 0) continue;
+                            const sample = (track, time, def, comps) => {
+                                if (!track) return def;
+                                let i = 0; while (i < track.times.length - 2 && time >= track.times[i + 1]) i++;
+                                let alpha = (track.times[i + 1] > track.times[i]) ? (time - track.times[i]) / (track.times[i + 1] - track.times[i]) : 0;
+                                if (comps === 4) return m4.slerp(track.values.subarray(i * 4, i * 4 + 4), track.values.subarray((i + 1) * 4, (i + 1) * 4 + 4), alpha);
+                                return m4.lerp(track.values.subarray(i * 3, i * 3 + 3), track.values.subarray((i + 1) * 3, (i + 1) * 3 + 3), alpha);
+                            };
+                            const absT = new Float32Array(allTimes.length * 3), absR = new Float32Array(allTimes.length * 4), absS = new Float32Array(allTimes.length * 3);
+                            allTimes.forEach((time, idx) => {
+                                absT.set(sample(raw.t, time, n.defT, 3), idx * 3);
+                                absR.set(sample(raw.r, time, n.defR, 4), idx * 4);
+                                absS.set(sample(raw.s, time, n.defS, 3), idx * 3);
+                            });
+                            bakedTracks[nId] = { times: new Float32Array(allTimes), t: absT, r: absR, s: absS };
+                        }
+                        let duration = 0; for (let k in bakedTracks) duration = Math.max(duration, bakedTracks[k].times[bakedTracks[k].times.length - 1]);
+                        animations[anim.name || `Anim_${aIdx}`] = { bakedTracks, duration };
+                    });
+                }
+                models[mid] = { renderables, nodes, calcOrder, animations, activeAnim: "", activeTime: 0 };
+                if (!modelOrder.includes(mid)) modelOrder.push(mid);
+            } catch (e) { console.error("GLB 加载失败:", e); }
+        }
+        setNodeTransform(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const n = m ? m.nodes[Math.floor(args.BI)] : null;
+            if (n) {
+                if (args.TYPE === '位置') {
+                    n.rtT[0] = Number(args.X);
+                    n.rtT[1] = Number(args.Y);
+                    n.rtT[2] = Number(args.Z);
+                } else if (args.TYPE === '旋转') {
+                    const x = Number(args.X) * D2R;
+                    const y = Number(args.Y) * D2R;
+                    const z = Number(args.Z) * D2R;
+                    n.rtR.set(m4.eulerToQuat(x, y, z));
+                } else if (args.TYPE === '缩放') {
+                    n.rtS[0] = Number(args.X);
+                    n.rtS[1] = Number(args.Y);
+                    n.rtS[2] = Number(args.Z);
+                }
+            }
+        }
+        getNodeTransform(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const n = m ? m.nodes[Math.floor(args.BI)] : null;
+            if (!n) return "[]";
+
+            if (args.TYPE === '位置') return JSON.stringify(this._lp(n.rtT));
+            if (args.TYPE === '缩放') return JSON.stringify(this._lp(n.rtS));
+            if (args.TYPE === '旋转') return JSON.stringify(this._lp(m4.quatToEuler(n.rtR)));
+            if (args.TYPE === '矩阵') {
+                const mat = m4.fromRotationTranslation(n.rtR, n.rtT, n.rtS);
+                return JSON.stringify(this._lp(mat));
+            }
+            return "[]";
+        }
+        setNodePose(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const n = m ? m.nodes[Math.floor(args.BI)] : null;
+            if (n) {
+                try {
+                    const matData = JSON.parse(args.MAT);
+                    if (Array.isArray(matData) && matData.length === 16) {
+                        const d = m4.decompose(new Float32Array(matData));
+                        n.rtT.set(d.t); n.rtR.set(d.r); n.rtS.set(d.s);
+                    }
+                } catch (e) { }
+            }
+        }
+        updateHierarchy(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            if (!m) return;
+            const localMat = new Float32Array(16);
+            m.calcOrder.forEach(idx => {
+                const n = m.nodes[idx];
+                m4.fromRotationTranslation(n.rtR, n.rtT, n.rtS, localMat);
+                if (n.parent === -1) n.world.set(localMat);
+                else n.world.set(m4.multiply(m.nodes[n.parent].world, localMat));
+                n.skinMatrix.set(m4.multiply(n.world, n.invBindWorld));
+            });
+        }
+        hasAnimationTrack(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const nIdx = Math.floor(args.BI);
+            if (!m || !m.activeAnim || !m.animations[m.activeAnim]) return false;
+            return !!m.animations[m.activeAnim].bakedTracks[nIdx];
+        }
+        getActiveAnimInfo(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const nIdx = Math.floor(args.BI);
+            // 没有动画返回默认值
+            if (!m || !m.activeAnim || !m.animations[m.activeAnim] || !m.animations[m.activeAnim].bakedTracks[nIdx]) {
+                const n = (m && m.nodes[nIdx]) ? m.nodes[nIdx] : null;
+                if (!n) return "[]";
+                if (args.TYPE === '位置') return JSON.stringify(this._lp(n.defT));
+                if (args.TYPE === '缩放') return JSON.stringify(this._lp(n.defS));
+                if (args.TYPE === '旋转') return JSON.stringify(this._lp(m4.quatToEuler(n.defR)));
+                return JSON.stringify(this._lp(m4.fromRotationTranslation(n.defR, n.defT, n.defS))); // 矩阵
+            }
+
+            const anim = m.animations[m.activeAnim];
+            const track = anim.bakedTracks[nIdx];
+
+            const time = m.activeTime % (anim.duration || 1);
+            let i = 0;
+            while (i < track.times.length - 2 && time >= track.times[i + 1]) i++;
+            let alpha = (track.times[i + 1] > track.times[i]) ? (time - track.times[i]) / (track.times[i + 1] - track.times[i]) : 0;
+
+            const t = m4.lerp(track.t.subarray(i * 3, i * 3 + 3), track.t.subarray((i + 1) * 3, (i + 1) * 3 + 3), alpha);
+            const r = m4.slerp(track.r.subarray(i * 4, i * 4 + 4), track.r.subarray((i + 1) * 4, (i + 1) * 4 + 4), alpha);
+            let s = [1, 1, 1];
+            if (track.s) s = m4.lerp(track.s.subarray(i * 3, i * 3 + 3), track.s.subarray((i + 1) * 3, (i + 1) * 3 + 3), alpha);
+
+            if (args.TYPE === '位置') return JSON.stringify(this._lp(t));
+            if (args.TYPE === '缩放') return JSON.stringify(this._lp(s));
+            if (args.TYPE === '旋转') return JSON.stringify(this._lp(m4.quatToEuler(r)));
+            return JSON.stringify(this._lp(m4.fromRotationTranslation(r, t, s))); // 矩阵
+        }
+        getMeshInfo(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            if (!m || !m.renderables[args.MSI]) return "";
+            const r = m.renderables[args.MSI];
+            if (args.INFO === 'name') return r.name;
+            if (args.INFO === 'material_name') return r.mat;
+            if (args.INFO === 'texture_name') return r.tex;
+            let infoKey = args.INFO;
+            if (infoKey === 'bone_indices') infoKey = 'node_indices';
+            if (infoKey === 'bone_weights') infoKey = 'node_weights';
+            const data = r.geo ? r.geo[infoKey] : null;
+            if (Array.isArray(data) || data instanceof Float32Array) return JSON.stringify(this._lp(data));
+            return data || "[]";
+        }
+        getSkinningMatrices(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            if (!m || !m.renderables[args.MSI]) return "[]";
+            const r = m.renderables[args.MSI];
+            let out = [];
+            r.handles.forEach(idx => {
+                const node = m.nodes[idx];
+                let mat;
+                if (r.isSkinned) {
+                    mat = (args.TYPE === '初始' || args.TYPE === 'original') ? m4.multiply(node.bindWorld, node.invBindWorld) : node.skinMatrix;
+                } else {
+                    mat = (args.TYPE === '初始' || args.TYPE === 'original') ? node.bindWorld : node.world;
+                }
+                out.push(...Array.from(mat));
+            });
+            return JSON.stringify(this._lp(out));
+        }
+        getNodeCount(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m && m.nodes ? m.nodes.length : 0; }
+        getNodeInfo(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const nIdx = Math.floor(args.BI);
+            if (!m || !m.nodes || nIdx < 0 || nIdx >= m.nodes.length) return "";
+            const n = m.nodes[nIdx];
+            if (args.INFO === 'pose_matrix') return JSON.stringify(this._lp(m4.fromRotationTranslation(n.rtR, n.rtT, n.rtS)));
+            if (args.INFO === 'original_matrix') return JSON.stringify(this._lp(n.bindWorld));
+            if (args.INFO === 'current_matrix') return JSON.stringify(this._lp(n.world));
+            if (args.INFO === 'bone_id' || args.INFO === 'node_id') return n.name;
+            if (args.INFO === 'parent_index') return n.parent !== undefined ? n.parent : -1;
+            return "";
+        }
+        activateAnimation(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.activeAnim = String(args.NAME); }
+        setAnimationTime(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.activeTime = Number(args.TIME); }
+        getMeshCount(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.renderables.length : 0; }
+        getMeshIndex(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.renderables.findIndex(r => r.name === String(args.MN)) : -1; }
+        getModelCount() { return modelOrder.length; }
+        getModelID(args) { return modelOrder[Math.floor(args.MI)] || ""; }
+        getModelIndex(args) { return modelOrder.indexOf(String(args.MID)); }
+        flushModel(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.renderables.forEach(r => { r.geo = null; }); }
+        clearAll() { models = {}; modelOrder = []; }
+        matrixToEulerDegrees(args) {
+            const m = (typeof args.M === 'string' ? JSON.parse(args.M) : args.M) || [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+            if (m.length < 16) return "[0,0,0]";
+            const { r } = m4.decompose(new Float32Array(m));
+            return JSON.stringify(this._lp(m4.quatToEuler(r)));
+        }
+    }
+    Scratch.extensions.register(new OmniGLB());
+})(Scratch);

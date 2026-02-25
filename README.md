@@ -50,12 +50,10 @@
 * **FlexGLTF扩展**：核心扩展，解析、句柄、计算、输出
     * 读取json模型，保存场景网格信息
     * FlexGLTF会遍历骨骼树，将骨骼的 初始(original)绝对坐标系矩阵、骨骼局部坐标系矩阵保存在内存中，并额外使用一部分内存存放一套 当前(current)绝对坐标系矩阵
-    * scratch层会从FlexGLTF中读取网格信息，比如VBO，提交给SImple3D（GPU）。同时，scratch层会为每个网格提交一份original矩阵流，由4根骨骼的变换矩阵扁平排列而成
-      * 为什么是4根而不是全部？
-      * 因为simple3d要求以网格为单位上传自己那一套original&current matrix，而不是以模型为单位。如果把全身的骨骼给每个网格都上传一次，那绝对卡爆而且浪费空间。其次simple3D每个网格受骨骼影响最大数为4。所以我便在FlexGLTF里对每个网格取权重最大的四根骨头，权重归一化确保合为一，然后通过这四根骨头         的全局索引在 初始绝对坐标系矩阵 中查询，把四个骨骼的矩阵扁平排列为64长度的数组，调用 `set mesh ( ) original matrix` 将original上传
-      * 最后，程序生成内容为[0,1,2,3]循环顶点数量后的数组，当成bone_indices，调用 `set mesh ( ) bone indices` 上传给simple3D（所以这一招就是为了骗simple3D，也是在避免修改simple3D源码的情况下的妥协）
+    * scratch层会从FlexGLTF中读取网格信息，比如VBO，提交给SImple3D（GPU）。
+    * FlexGLTF会单独提取出当前网格会用到的所有骨骼（为每个网格单独创建handles），把每个顶点在handles中用到的骨骼的索引作为bone_indices，调用 `set mesh ( ) bone indices` 上传给simple3D
     * 用户可以在渲染循环(renderLoop)中每帧修改骨骼的局部坐标系矩阵，并在修改后调用 `更新模型 ( ) 的骨骼层级继承计算` 积木。此积木会重新遍历骨骼树，对所有骨骼进行层次继承变换，并将计算好的结果写入内存中的 当前(current)绝对坐标系矩阵
-    * 最后，在调用Simple3D的 `Draw Mesh（）` 之前，scratch层的积木会将调用 `set mesh ( ) current matrix` 把当前绝对坐标系矩阵上传。
+    * 最后，在调用Simple3D的 `Draw Mesh（）` 之前，scratch层的积木会将调用 `set mesh ( ) current matrix` 把当前绝对坐标系矩阵，对每个网格挑取它们会用到的那部分，组成矩阵流上传。
 
 ---
 

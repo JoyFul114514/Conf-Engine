@@ -1,14 +1,11 @@
 // Name: OmniGLB
 // ID: omniGLB
-// Description: Better GLB loader (TRS Interface + Node-Based Precision)
+// Description: Better GLB loader (Pure TRS Pipeline + Quaternion Slerp)
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.3.2 - Animation TRS
-
+// Version: 1.4.0 - TRS Pipeline
 (function (Scratch) {
     'use strict';
-
-    // === Math Helpers ===
     const D2R = Math.PI / 180;
     const R2D = 180 / Math.PI;
 
@@ -38,7 +35,6 @@
         out[12] = (m11 * b07 - m10 * b09 - m12 * b06) * det; out[13] = (m00 * b09 - m01 * b07 + m02 * b06) * det; out[14] = (m31 * b01 - m30 * b05 - m32 * b00) * det; out[15] = (m20 * b05 - m21 * b01 + m22 * b00) * det;
         return out;
     }
-
     const m4 = {
         identity: () => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
         multiply: multiply,
@@ -144,35 +140,38 @@
                     { opcode: 'getModelCount', blockType: Scratch.BlockType.REPORTER, text: '总模型数' },
                     { opcode: 'getModelID', blockType: Scratch.BlockType.REPORTER, text: '索引 [MI] 的模型 ID', arguments: { MI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'getModelIndex', blockType: Scratch.BlockType.REPORTER, text: 'ID [MID] 的模型索引', arguments: { MID: { type: 'string', defaultValue: 'model' } } },
-                    { opcode: 'getMeshIndex', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 中网格名为 [MN] 的索引', arguments: { MI: { type: 'number', defaultValue: 0 }, MN: { type: 'string', defaultValue: '' } } },
+                    { opcode: 'getMeshIndex', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 中网格名为[MN] 的索引', arguments: { MI: { type: 'number', defaultValue: 0 }, MN: { type: 'string', defaultValue: '' } } },
+
                     { blockType: Scratch.BlockType.LABEL, text: "节点变换" },
-                    { opcode: 'setNodeTransform', blockType: Scratch.BlockType.COMMAND, text: '模型[MI] 节点[BI] 设置 [TYPE] X:[X] Y:[Y] Z:[Z]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'trsSetMenu' }, X: { type: 'number', defaultValue: 0 }, Y: { type: 'number', defaultValue: 0 }, Z: { type: 'number', defaultValue: 0 } } },
-                    { opcode: 'getNodeTransform', blockType: Scratch.BlockType.REPORTER, text: '获取模型[MI] 节点[BI] 的 [TYPE]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'trsGetMenu' } } },
+                    { opcode: 'setNodeTransform', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 节点 [BI] 设置 TRS [TRS]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, TRS: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' } } },
+                    { opcode: 'getNodeTransform', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 的 TRS', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'updateHierarchy', blockType: Scratch.BlockType.COMMAND, text: '更新模型 [MI] 的节点变换', arguments: { MI: { type: 'number', defaultValue: 0 } } },
+                    { opcode: 'createTRS', blockType: Scratch.BlockType.REPORTER, text: '构造 TRS | 位移 X:[PX] Y:[PY] Z:[PZ] 旋转(欧拉) X:[RX] Y:[RY] Z:[RZ] 缩放 X:[SX] Y:[SY] Z:[SZ]', arguments: { PX: { type: 'number', defaultValue: 0 }, PY: { type: 'number', defaultValue: 0 }, PZ: { type: 'number', defaultValue: 0 }, RX: { type: 'number', defaultValue: 0 }, RY: { type: 'number', defaultValue: 0 }, RZ: { type: 'number', defaultValue: 0 }, SX: { type: 'number', defaultValue: 1 }, SY: { type: 'number', defaultValue: 1 }, SZ: { type: 'number', defaultValue: 1 } } },
+                    { opcode: 'lerpTRS', blockType: Scratch.BlockType.REPORTER, text: '插值 TRS A:[TRSA] 和 TRS B:[TRSB] 进度:[T]', arguments: { TRSA: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, TRSB: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, T: { type: 'number', defaultValue: 0.5 } } },
+
                     { blockType: Scratch.BlockType.LABEL, text: "节点信息" },
                     { opcode: 'getNodeCount', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 的节点总数', arguments: { MI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'getNodeInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 的 [INFO]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, INFO: { type: 'string', menu: 'nodeMenu' } } },
+
                     { blockType: Scratch.BlockType.LABEL, text: "网格数据" },
                     { opcode: 'getMeshCount', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 的网格数量', arguments: { MI: { type: 'number', defaultValue: 0 } } },
-                    { opcode: 'getMeshInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格 [MSI] 的 [INFO]', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, INFO: { type: 'string', menu: 'meshMenu' } } },
+                    { opcode: 'getMeshInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格[MSI] 的 [INFO]', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, INFO: { type: 'string', menu: 'meshMenu' } } },
                     { opcode: 'getSkinningMatrices', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格 [MSI] 的 [TYPE] 绑定矩阵', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'poseMenu', defaultValue: 'current' } } },
+
                     { blockType: Scratch.BlockType.LABEL, text: "动画控制" },
                     { opcode: 'activateAnimation', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 激活动画 [NAME]', arguments: { MI: { type: 'number', defaultValue: 0 }, NAME: { type: 'string', defaultValue: 'Run' } } },
                     { opcode: 'setAnimationTime', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 设置激活动画时刻 [TIME]', arguments: { MI: { type: 'number', defaultValue: 0 }, TIME: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'hasAnimationTrack', blockType: Scratch.BlockType.BOOLEAN, text: '模型 [MI] 节点 [BI] 当前动画有轨道？', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 } } },
-                    { opcode: 'getActiveAnimInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 激活动画的 [TYPE]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'animInfoMenu' } } },
+                    { opcode: 'getActiveAnimInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 激活动画的 TRS', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 } } },
+
                     { blockType: Scratch.BlockType.LABEL, text: "高级" },
                     { opcode: 'matrixToEulerDegrees', blockType: Scratch.BlockType.REPORTER, text: '矩阵转欧拉角 [M]', arguments: { M: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } } },
                     { opcode: 'setNodePose', blockType: Scratch.BlockType.COMMAND, text: '设置节点 [BI] 矩阵 [MAT]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, MAT: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } } }
                 ],
                 menus: {
-                    trsSetMenu: { items: ['位置', '旋转', '缩放'] },
-                    trsGetMenu: { items: ['位置', '旋转', '缩放', '矩阵'] },
-                    animInfoMenu: { items: ['位置', '旋转', '缩放', '矩阵'] },
                     nodeMenu: { items: ['node_id', 'parent_index', 'current_matrix'] },
                     meshMenu: { items: ['name', 'material_name', 'texture_name', 'position', 'uv', 'node_indices', 'node_weights'] },
-                    poseMenu: { items: ['current', 'original'] },
-                    debugMenu: { items: ['增量矩阵', '当前全局矩阵', '默认全局矩阵', '父级索引'] }
+                    poseMenu: { items: ['current', 'original'] }
                 }
             };
         }
@@ -239,7 +238,7 @@
                         parent: -1,
                         defT, defR, defS,
                         bindLocal,
-                        // TRS
+                        // TRS Cache
                         rtT: Float32Array.from(defT),
                         rtR: Float32Array.from(defR),
                         rtS: Float32Array.from(defS),
@@ -391,53 +390,90 @@
                 if (!modelOrder.includes(mid)) modelOrder.push(mid);
             } catch (e) { console.error("GLB 加载失败:", e); }
         }
+
+        // --- TRS 控制 ---
         setNodeTransform(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             const n = m ? m.nodes[Math.floor(args.BI)] : null;
             if (n) {
-                if (args.TYPE === '位置') {
-                    n.rtT[0] = Number(args.X);
-                    n.rtT[1] = Number(args.Y);
-                    n.rtT[2] = Number(args.Z);
-                } else if (args.TYPE === '旋转') {
-                    const x = Number(args.X) * D2R;
-                    const y = Number(args.Y) * D2R;
-                    const z = Number(args.Z) * D2R;
-                    n.rtR.set(m4.eulerToQuat(x, y, z));
-                } else if (args.TYPE === '缩放') {
-                    n.rtS[0] = Number(args.X);
-                    n.rtS[1] = Number(args.Y);
-                    n.rtS[2] = Number(args.Z);
-                }
-            }
-        }
-        getNodeTransform(args) {
-            const m = models[modelOrder[Math.floor(args.MI)]];
-            const n = m ? m.nodes[Math.floor(args.BI)] : null;
-            if (!n) return "[]";
-
-            if (args.TYPE === '位置') return JSON.stringify(this._lp(n.rtT));
-            if (args.TYPE === '缩放') return JSON.stringify(this._lp(n.rtS));
-            if (args.TYPE === '旋转') return JSON.stringify(this._lp(m4.quatToEuler(n.rtR)));
-            if (args.TYPE === '矩阵') {
-                const mat = m4.fromRotationTranslation(n.rtR, n.rtT, n.rtS);
-                return JSON.stringify(this._lp(mat));
-            }
-            return "[]";
-        }
-        setNodePose(args) {
-            const m = models[modelOrder[Math.floor(args.MI)]];
-            const n = m ? m.nodes[Math.floor(args.BI)] : null;
-            if (n) {
                 try {
-                    const matData = JSON.parse(args.MAT);
-                    if (Array.isArray(matData) && matData.length === 16) {
-                        const d = m4.decompose(new Float32Array(matData));
-                        n.rtT.set(d.t); n.rtR.set(d.r); n.rtS.set(d.s);
+                    const trs = JSON.parse(args.TRS);
+                    if (Array.isArray(trs) && trs.length >= 10) {
+                        n.rtT.set([trs[0], trs[1], trs[2]]);
+                        n.rtR.set([trs[3], trs[4], trs[5], trs[6]]);
+                        n.rtS.set([trs[7], trs[8], trs[9]]);
                     }
                 } catch (e) { }
             }
         }
+
+        getNodeTransform(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const n = m ? m.nodes[Math.floor(args.BI)] : null;
+            if (!n) return "[0,0,0, 0,0,0,1, 1,1,1]";
+            return JSON.stringify(this._lp([...n.rtT, ...n.rtR, ...n.rtS]));
+        }
+
+        createTRS(args) {
+            const px = Number(args.PX) || 0, py = Number(args.PY) || 0, pz = Number(args.PZ) || 0;
+            const rx = Number(args.RX) || 0, ry = Number(args.RY) || 0, rz = Number(args.RZ) || 0;
+            const sx = args.SX !== undefined ? Number(args.SX) : 1;
+            const sy = args.SY !== undefined ? Number(args.SY) : 1;
+            const sz = args.SZ !== undefined ? Number(args.SZ) : 1;
+
+            // 欧拉角转四元数 (内部规避死锁)
+            const q = m4.eulerToQuat(rx * D2R, ry * D2R, rz * D2R);
+            return JSON.stringify(this._lp([px, py, pz, q[0], q[1], q[2], q[3], sx, sy, sz]));
+        }
+
+        lerpTRS(args) {
+            try {
+                const trsa = JSON.parse(args.TRSA);
+                const trsb = JSON.parse(args.TRSB);
+                let t = Number(args.T) || 0;
+                t = Math.max(0, Math.min(1, t));
+
+                if (Array.isArray(trsa) && Array.isArray(trsb) && trsa.length >= 10 && trsb.length >= 10) {
+                    const pa = trsa.slice(0, 3), pb = trsb.slice(0, 3);
+                    const qa = trsa.slice(3, 7), qb = trsb.slice(3, 7);
+                    const sa = trsa.slice(7, 10), sb = trsb.slice(7, 10);
+
+                    // 分开插值: P, S 线性，Q 球面线性
+                    const p = m4.lerp(pa, pb, t);
+                    const q = m4.slerp(qa, qb, t);
+                    const s = m4.lerp(sa, sb, t);
+
+                    return JSON.stringify(this._lp([...p, ...q, ...s]));
+                }
+            } catch (e) { }
+            return "[0,0,0, 0,0,0,1, 1,1,1]";
+        }
+
+        getActiveAnimInfo(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const nIdx = Math.floor(args.BI);
+            if (!m || !m.activeAnim || !m.animations[m.activeAnim] || !m.animations[m.activeAnim].bakedTracks[nIdx]) {
+                const n = (m && m.nodes[nIdx]) ? m.nodes[nIdx] : null;
+                if (!n) return "[0,0,0, 0,0,0,1, 1,1,1]";
+                return JSON.stringify(this._lp([...n.defT, ...n.defR, ...n.defS]));
+            }
+
+            const anim = m.animations[m.activeAnim];
+            const track = anim.bakedTracks[nIdx];
+            const time = m.activeTime % (anim.duration || 1);
+
+            let i = 0;
+            while (i < track.times.length - 2 && time >= track.times[i + 1]) i++;
+            let alpha = (track.times[i + 1] > track.times[i]) ? (time - track.times[i]) / (track.times[i + 1] - track.times[i]) : 0;
+
+            const t = m4.lerp(track.t.subarray(i * 3, i * 3 + 3), track.t.subarray((i + 1) * 3, (i + 1) * 3 + 3), alpha);
+            const r = m4.slerp(track.r.subarray(i * 4, i * 4 + 4), track.r.subarray((i + 1) * 4, (i + 1) * 4 + 4), alpha);
+            let s = [1, 1, 1];
+            if (track.s) s = m4.lerp(track.s.subarray(i * 3, i * 3 + 3), track.s.subarray((i + 1) * 3, (i + 1) * 3 + 3), alpha);
+
+            return JSON.stringify(this._lp([...t, ...r, ...s]));
+        }
+
         updateHierarchy(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             if (!m) return;
@@ -450,43 +486,15 @@
                 n.skinMatrix.set(m4.multiply(n.world, n.invBindWorld));
             });
         }
+
+        // --- 基础信息获取 ---
         hasAnimationTrack(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             const nIdx = Math.floor(args.BI);
             if (!m || !m.activeAnim || !m.animations[m.activeAnim]) return false;
             return !!m.animations[m.activeAnim].bakedTracks[nIdx];
         }
-        getActiveAnimInfo(args) {
-            const m = models[modelOrder[Math.floor(args.MI)]];
-            const nIdx = Math.floor(args.BI);
-            // 没有动画返回默认值
-            if (!m || !m.activeAnim || !m.animations[m.activeAnim] || !m.animations[m.activeAnim].bakedTracks[nIdx]) {
-                const n = (m && m.nodes[nIdx]) ? m.nodes[nIdx] : null;
-                if (!n) return "[]";
-                if (args.TYPE === '位置') return JSON.stringify(this._lp(n.defT));
-                if (args.TYPE === '缩放') return JSON.stringify(this._lp(n.defS));
-                if (args.TYPE === '旋转') return JSON.stringify(this._lp(m4.quatToEuler(n.defR)));
-                return JSON.stringify(this._lp(m4.fromRotationTranslation(n.defR, n.defT, n.defS))); // 矩阵
-            }
 
-            const anim = m.animations[m.activeAnim];
-            const track = anim.bakedTracks[nIdx];
-
-            const time = m.activeTime % (anim.duration || 1);
-            let i = 0;
-            while (i < track.times.length - 2 && time >= track.times[i + 1]) i++;
-            let alpha = (track.times[i + 1] > track.times[i]) ? (time - track.times[i]) / (track.times[i + 1] - track.times[i]) : 0;
-
-            const t = m4.lerp(track.t.subarray(i * 3, i * 3 + 3), track.t.subarray((i + 1) * 3, (i + 1) * 3 + 3), alpha);
-            const r = m4.slerp(track.r.subarray(i * 4, i * 4 + 4), track.r.subarray((i + 1) * 4, (i + 1) * 4 + 4), alpha);
-            let s = [1, 1, 1];
-            if (track.s) s = m4.lerp(track.s.subarray(i * 3, i * 3 + 3), track.s.subarray((i + 1) * 3, (i + 1) * 3 + 3), alpha);
-
-            if (args.TYPE === '位置') return JSON.stringify(this._lp(t));
-            if (args.TYPE === '缩放') return JSON.stringify(this._lp(s));
-            if (args.TYPE === '旋转') return JSON.stringify(this._lp(m4.quatToEuler(r)));
-            return JSON.stringify(this._lp(m4.fromRotationTranslation(r, t, s))); // 矩阵
-        }
         getMeshInfo(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             if (!m || !m.renderables[args.MSI]) return "";
@@ -501,6 +509,7 @@
             if (Array.isArray(data) || data instanceof Float32Array) return JSON.stringify(this._lp(data));
             return data || "[]";
         }
+
         getSkinningMatrices(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             if (!m || !m.renderables[args.MSI]) return "[]";
@@ -509,16 +518,15 @@
             r.handles.forEach(idx => {
                 const node = m.nodes[idx];
                 let mat;
-                if (r.isSkinned) {
-                    mat = (args.TYPE === '初始' || args.TYPE === 'original') ? m4.multiply(node.bindWorld, node.invBindWorld) : node.skinMatrix;
-                } else {
-                    mat = (args.TYPE === '初始' || args.TYPE === 'original') ? node.bindWorld : node.world;
-                }
+                if (r.isSkinned) mat = (args.TYPE === '初始' || args.TYPE === 'original') ? m4.multiply(node.bindWorld, node.invBindWorld) : node.skinMatrix;
+                else mat = (args.TYPE === '初始' || args.TYPE === 'original') ? node.bindWorld : node.world;
                 out.push(...Array.from(mat));
             });
             return JSON.stringify(this._lp(out));
         }
+
         getNodeCount(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m && m.nodes ? m.nodes.length : 0; }
+
         getNodeInfo(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             const nIdx = Math.floor(args.BI);
@@ -531,6 +539,7 @@
             if (args.INFO === 'parent_index') return n.parent !== undefined ? n.parent : -1;
             return "";
         }
+
         activateAnimation(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.activeAnim = String(args.NAME); }
         setAnimationTime(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.activeTime = Number(args.TIME); }
         getMeshCount(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.renderables.length : 0; }
@@ -540,11 +549,26 @@
         getModelIndex(args) { return modelOrder.indexOf(String(args.MID)); }
         flushModel(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.renderables.forEach(r => { r.geo = null; }); }
         clearAll() { models = {}; modelOrder = []; }
+
         matrixToEulerDegrees(args) {
             const m = (typeof args.M === 'string' ? JSON.parse(args.M) : args.M) || [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
             if (m.length < 16) return "[0,0,0]";
             const { r } = m4.decompose(new Float32Array(m));
             return JSON.stringify(this._lp(m4.quatToEuler(r)));
+        }
+
+        setNodePose(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const n = m ? m.nodes[Math.floor(args.BI)] : null;
+            if (n) {
+                try {
+                    const matData = JSON.parse(args.MAT);
+                    if (Array.isArray(matData) && matData.length === 16) {
+                        const d = m4.decompose(new Float32Array(matData));
+                        n.rtT.set(d.t); n.rtR.set(d.r); n.rtS.set(d.s);
+                    }
+                } catch (e) { }
+            }
         }
     }
     Scratch.extensions.register(new OmniGLB());

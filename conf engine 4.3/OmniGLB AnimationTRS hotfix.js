@@ -3,7 +3,7 @@
 // Description: Better GLB loader
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.4.2 - TRS Pipeline - decompose hotfix
+// Version: 1.4.3 - TRS Pipeline -  Edit euler&quat
 (function (Scratch) {
     'use strict';
     const D2R = Math.PI / 180;
@@ -87,11 +87,12 @@
         eulerToQuat: (x, y, z) => {
             const c1 = Math.cos(x / 2), c2 = Math.cos(y / 2), c3 = Math.cos(z / 2);
             const s1 = Math.sin(x / 2), s2 = Math.sin(y / 2), s3 = Math.sin(z / 2);
+            // 顺序：ZXY
             return new Float32Array([
-                s1 * c2 * c3 + c1 * s2 * s3,
-                c1 * s2 * c3 - s1 * c2 * s3,
-                c1 * c2 * s3 + s1 * s2 * c3,
-                c1 * c2 * c3 - s1 * s2 * s3
+                s1 * c2 * c3 + c1 * s2 * s3, // x
+                c1 * s2 * c3 - s1 * c2 * s3, // y
+                c1 * c2 * s3 + s1 * s2 * c3, // z
+                c1 * c2 * c3 - s1 * s2 * s3  // w
             ]);
         },
         quatToEuler: (q) => {
@@ -99,19 +100,16 @@
             const x2 = x + x, y2 = y + y, z2 = z + z;
             const xx = x * x2, xy = x * y2, xz = x * z2, yy = y * y2, yz = y * z2, zz = z * z2;
             const wx = w * x2, wy = w * y2, wz = w * z2;
-
-            const sinr_cosp = 2 * (w * x + y * z);
-            const cosr_cosp = 1 - 2 * (x * x + y * y);
-            const roll_x = Math.atan2(sinr_cosp, cosr_cosp);
-
-            const sinp_val = 2 * (w * y - z * x);
-            const pitch_y = Math.abs(sinp_val) >= 1 ? Math.sign(sinp_val) * Math.PI / 2 : Math.asin(sinp_val);
-
-            const siny_cosp = 2 * (w * z + x * y);
-            const cosy_cosp = 1 - 2 * (y * y + z * z);
-            const yaw_z = Math.atan2(siny_cosp, cosy_cosp);
-
-            return [roll_x * R2D, pitch_y * R2D, yaw_z * R2D];
+            // Pitch (X)
+            const sinp = 2 * (w * x - y * z);
+            let pitch_x;
+            if (Math.abs(sinp) >= 1) pitch_x = (Math.PI / 2) * Math.sign(sinp);
+            else pitch_x = Math.asin(sinp);
+            // Yaw (Y)
+            const yaw_y = Math.atan2(2 * (w * y + z * x), 1 - 2 * (x * x + y * y));
+            // Roll (Z)
+            const roll_z = Math.atan2(2 * (w * z + x * y), 1 - 2 * (x * x + z * z));
+            return [pitch_x * R2D, yaw_y * R2D, roll_z * R2D];
         }
     };
 

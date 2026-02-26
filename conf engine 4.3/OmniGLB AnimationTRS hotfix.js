@@ -3,7 +3,7 @@
 // Description: Better GLB loader
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.4.3 - TRS Pipeline -  Edit euler&quat
+// Version: 1.4.4 - TRS Pipeline -  Edit euler&quat
 (function (Scratch) {
     'use strict';
     const D2R = Math.PI / 180;
@@ -87,12 +87,13 @@
         eulerToQuat: (x, y, z) => {
             const c1 = Math.cos(x / 2), c2 = Math.cos(y / 2), c3 = Math.cos(z / 2);
             const s1 = Math.sin(x / 2), s2 = Math.sin(y / 2), s3 = Math.sin(z / 2);
-            // 顺序：ZXY
+
+            // 正确的 YXZ ，实际ZXY
             return new Float32Array([
                 s1 * c2 * c3 + c1 * s2 * s3, // x
                 c1 * s2 * c3 - s1 * c2 * s3, // y
-                c1 * c2 * s3 + s1 * s2 * c3, // z
-                c1 * c2 * c3 - s1 * s2 * s3  // w
+                c1 * c2 * s3 - s1 * s2 * c3, // z 
+                c1 * c2 * c3 + s1 * s2 * s3  // w 
             ]);
         },
         quatToEuler: (q) => {
@@ -417,8 +418,7 @@
             const sx = args.SX !== undefined ? Number(args.SX) : 1;
             const sy = args.SY !== undefined ? Number(args.SY) : 1;
             const sz = args.SZ !== undefined ? Number(args.SZ) : 1;
-
-            // 欧拉角 ---> 四元数
+            // ZXY
             const q = m4.eulerToQuat(rx * D2R, ry * D2R, rz * D2R);
             return JSON.stringify(this._lp([px, py, pz, q[0], q[1], q[2], q[3], sx, sy, sz]));
         }

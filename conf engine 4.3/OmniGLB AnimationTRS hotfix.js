@@ -3,7 +3,7 @@
 // Description: Better GLB loader
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.4.1 - TRS Pipeline
+// Version: 1.4.2 - TRS Pipeline - decompose hotfix
 (function (Scratch) {
     'use strict';
     const D2R = Math.PI / 180;
@@ -149,7 +149,7 @@
                     { opcode: 'createTRS', blockType: Scratch.BlockType.REPORTER, text: '构造 TRS  位移[PX] [PY] [PZ] 旋转 [RX] [RY] [RZ] 缩放 [SX] [SY] [SZ]', arguments: { PX: { type: 'number', defaultValue: 0 }, PY: { type: 'number', defaultValue: 0 }, PZ: { type: 'number', defaultValue: 0 }, RX: { type: 'number', defaultValue: 0 }, RY: { type: 'number', defaultValue: 0 }, RZ: { type: 'number', defaultValue: 0 }, SX: { type: 'number', defaultValue: 1 }, SY: { type: 'number', defaultValue: 1 }, SZ: { type: 'number', defaultValue: 1 } } }, // 要用欧拉角
                     { opcode: 'decomposeTRS', blockType: Scratch.BlockType.REPORTER, text: '分解 TRS [TRS] 的 [TYPE] [AXIS] 分量', arguments: { TRS: { type: Scratch.ArgumentType.STRING, defaultValue: '[0,0,0,0,0,0,1,1,1,1]' }, TYPE: { type: Scratch.ArgumentType.STRING, menu: 'TRSType' }, AXIS: { type: Scratch.ArgumentType.STRING, menu: 'Axis' } } },
                     { opcode: 'lerpTRS', blockType: Scratch.BlockType.REPORTER, text: '插值 TRS A:[TRSA] B:[TRSB] 进度:[T]', arguments: { TRSA: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, TRSB: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, T: { type: 'number', defaultValue: 0.5 } } },
-
+                
                     { blockType: Scratch.BlockType.LABEL, text: "节点信息" },
                     { opcode: 'getNodeCount', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 的节点总数', arguments: { MI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'getNodeInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 的 [INFO]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, INFO: { type: 'string', menu: 'nodeMenu' } } },
@@ -171,8 +171,8 @@
                 ],
                 menus: {
                     nodeMenu: { items: ['node_id', 'parent_index', 'current_matrix'] },
-                    TRSType: { acceptReporters: true, items: [{ text: '位移 (Position)', value: 'T' }, { text: '旋转 (Euler)', value: 'R' }, { text: '缩放 (Scale)', value: 'S' }] },
-                    Axis: { acceptReporters: true, items: ['X', 'Y', 'Z'] },
+                    TRSType: {acceptReporters: true,items: [ { text: '位移 (Position)', value: 'T' }, { text: '旋转 (Euler)', value: 'R' }, { text: '缩放 (Scale)', value: 'S' }]},
+                    Axis: {acceptReporters: true,items: ['X', 'Y', 'Z']},
                     meshMenu: { items: ['name', 'material_name', 'texture_name', 'position', 'uv', 'node_indices', 'node_weights'] },
                     poseMenu: { items: ['current', 'original'] }
                 }
@@ -425,31 +425,32 @@
             return JSON.stringify(this._lp([px, py, pz, q[0], q[1], q[2], q[3], sx, sy, sz]));
         }
         decomposeTRS(args) {
-            const data = JSON.parse(args.TRS);
-            if (!Array.isArray(data) || data.length < 10) return 0;
-            const type = args.TYPE;
-            const axis = args.AXIS;
-            const axisIdx = axis === 'X' ? 0 : (axis === 'Y' ? 1 : 2);
-            if (type === 'T') {
-                return Number(data[axisIdx]) || 0;
-            }
-            if (type === 'S') {
-                return Number(data[7 + axisIdx]) || 0;
-            }
-            if (type === 'R') {
-                const quat = [
-                    data[3], // x
-                    data[4], // y
-                    data[5], // z
-                    data[6]  // w
-                ];
-                const eulerStr = this._quatToEulerDegrees(quat);
-                const euler = JSON.parse(eulerStr);
-                return Number(euler[axisIdx]) || 0;
+            try {
+                let data;
+                if (typeof args.TRS === 'string') {
+                    data = JSON.parse(args.TRS);
+                } else {
+                    data = args.TRS; // 如果已经是数组，直接赋值，但是scratch只能传string？
+                }
+                if (!Array.isArray(data) || data.length < 10) return 0;
+                const type = args.TYPE;
+                const axis = args.AXIS;
+                const axisIdx = axis === 'X' ? 0 : (axis === 'Y' ? 1 : 2);
+                if (type === 'T') return Number(data[axisIdx]) || 0;
+                if (type === 'S') return Number(data[7 + axisIdx]) || 0;
+                if (type === 'R') {
+                    const quat = [data[3], data[4], data[5], data[6]];
+                    const eulerResult = m4.quatToEuler(quat);
+                    let euler;
+                    euler = eulerResult;
+                    return Number(euler[axisIdx]) || 0;
+                }
+            } catch (e) {
+                console.error("OmniGLB decomposeTRS Error:", e);
+                return 0;
             }
             return 0;
         }
-
         lerpTRS(args) {
             try {
                 const trsa = JSON.parse(args.TRSA);
@@ -510,8 +511,6 @@
                 n.skinMatrix.set(m4.multiply(n.world, n.invBindWorld));
             });
         }
-
-        // --- 基础信息获取 ---
         hasAnimationTrack(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             const nIdx = Math.floor(args.BI);

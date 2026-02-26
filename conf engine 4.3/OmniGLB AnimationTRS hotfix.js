@@ -1,9 +1,9 @@
 // Name: OmniGLB
 // ID: omniGLB
-// Description: Better GLB loader (Pure TRS Pipeline + Quaternion Slerp)
+// Description: Better GLB loader
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.4.0 - TRS Pipeline
+// Version: 1.4.1 - TRS Pipeline
 (function (Scratch) {
     'use strict';
     const D2R = Math.PI / 180;
@@ -146,8 +146,9 @@
                     { opcode: 'setNodeTransform', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 节点 [BI] 设置 TRS [TRS]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, TRS: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' } } },
                     { opcode: 'getNodeTransform', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 的 TRS', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'updateHierarchy', blockType: Scratch.BlockType.COMMAND, text: '更新模型 [MI] 的节点变换', arguments: { MI: { type: 'number', defaultValue: 0 } } },
-                    { opcode: 'createTRS', blockType: Scratch.BlockType.REPORTER, text: '构造 TRS | 位移 X:[PX] Y:[PY] Z:[PZ] 旋转(欧拉) X:[RX] Y:[RY] Z:[RZ] 缩放 X:[SX] Y:[SY] Z:[SZ]', arguments: { PX: { type: 'number', defaultValue: 0 }, PY: { type: 'number', defaultValue: 0 }, PZ: { type: 'number', defaultValue: 0 }, RX: { type: 'number', defaultValue: 0 }, RY: { type: 'number', defaultValue: 0 }, RZ: { type: 'number', defaultValue: 0 }, SX: { type: 'number', defaultValue: 1 }, SY: { type: 'number', defaultValue: 1 }, SZ: { type: 'number', defaultValue: 1 } } },
-                    { opcode: 'lerpTRS', blockType: Scratch.BlockType.REPORTER, text: '插值 TRS A:[TRSA] 和 TRS B:[TRSB] 进度:[T]', arguments: { TRSA: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, TRSB: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, T: { type: 'number', defaultValue: 0.5 } } },
+                    { opcode: 'createTRS', blockType: Scratch.BlockType.REPORTER, text: '构造 TRS  位移[PX] [PY] [PZ] 旋转 [RX] [RY] [RZ] 缩放 [SX] [SY] [SZ]', arguments: { PX: { type: 'number', defaultValue: 0 }, PY: { type: 'number', defaultValue: 0 }, PZ: { type: 'number', defaultValue: 0 }, RX: { type: 'number', defaultValue: 0 }, RY: { type: 'number', defaultValue: 0 }, RZ: { type: 'number', defaultValue: 0 }, SX: { type: 'number', defaultValue: 1 }, SY: { type: 'number', defaultValue: 1 }, SZ: { type: 'number', defaultValue: 1 } } }, // 要用欧拉角
+                    { opcode: 'decomposeTRS', blockType: Scratch.BlockType.REPORTER, text: '分解 TRS [TRS] 的 [TYPE] [AXIS] 分量', arguments: { TRS: { type: Scratch.ArgumentType.STRING, defaultValue: '[0,0,0,0,0,0,1,1,1,1]' }, TYPE: { type: Scratch.ArgumentType.STRING, menu: 'TRSType' }, AXIS: { type: Scratch.ArgumentType.STRING, menu: 'Axis' } } },
+                    { opcode: 'lerpTRS', blockType: Scratch.BlockType.REPORTER, text: '插值 TRS A:[TRSA] B:[TRSB] 进度:[T]', arguments: { TRSA: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, TRSB: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, T: { type: 'number', defaultValue: 0.5 } } },
 
                     { blockType: Scratch.BlockType.LABEL, text: "节点信息" },
                     { opcode: 'getNodeCount', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 的节点总数', arguments: { MI: { type: 'number', defaultValue: 0 } } },
@@ -170,6 +171,8 @@
                 ],
                 menus: {
                     nodeMenu: { items: ['node_id', 'parent_index', 'current_matrix'] },
+                    TRSType: { acceptReporters: true, items: [{ text: '位移 (Position)', value: 'T' }, { text: '旋转 (Euler)', value: 'R' }, { text: '缩放 (Scale)', value: 'S' }] },
+                    Axis: { acceptReporters: true, items: ['X', 'Y', 'Z'] },
                     meshMenu: { items: ['name', 'material_name', 'texture_name', 'position', 'uv', 'node_indices', 'node_weights'] },
                     poseMenu: { items: ['current', 'original'] }
                 }
@@ -390,8 +393,6 @@
                 if (!modelOrder.includes(mid)) modelOrder.push(mid);
             } catch (e) { console.error("GLB 加载失败:", e); }
         }
-
-        // --- TRS 控制 ---
         setNodeTransform(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             const n = m ? m.nodes[Math.floor(args.BI)] : null;
@@ -406,14 +407,12 @@
                 } catch (e) { }
             }
         }
-
         getNodeTransform(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             const n = m ? m.nodes[Math.floor(args.BI)] : null;
             if (!n) return "[0,0,0, 0,0,0,1, 1,1,1]";
             return JSON.stringify(this._lp([...n.rtT, ...n.rtR, ...n.rtS]));
         }
-
         createTRS(args) {
             const px = Number(args.PX) || 0, py = Number(args.PY) || 0, pz = Number(args.PZ) || 0;
             const rx = Number(args.RX) || 0, ry = Number(args.RY) || 0, rz = Number(args.RZ) || 0;
@@ -421,9 +420,34 @@
             const sy = args.SY !== undefined ? Number(args.SY) : 1;
             const sz = args.SZ !== undefined ? Number(args.SZ) : 1;
 
-            // 欧拉角转四元数 (内部规避死锁)
+            // 欧拉角 ---> 四元数
             const q = m4.eulerToQuat(rx * D2R, ry * D2R, rz * D2R);
             return JSON.stringify(this._lp([px, py, pz, q[0], q[1], q[2], q[3], sx, sy, sz]));
+        }
+        decomposeTRS(args) {
+            const data = JSON.parse(args.TRS);
+            if (!Array.isArray(data) || data.length < 10) return 0;
+            const type = args.TYPE;
+            const axis = args.AXIS;
+            const axisIdx = axis === 'X' ? 0 : (axis === 'Y' ? 1 : 2);
+            if (type === 'T') {
+                return Number(data[axisIdx]) || 0;
+            }
+            if (type === 'S') {
+                return Number(data[7 + axisIdx]) || 0;
+            }
+            if (type === 'R') {
+                const quat = [
+                    data[3], // x
+                    data[4], // y
+                    data[5], // z
+                    data[6]  // w
+                ];
+                const eulerStr = this._quatToEulerDegrees(quat);
+                const euler = JSON.parse(eulerStr);
+                return Number(euler[axisIdx]) || 0;
+            }
+            return 0;
         }
 
         lerpTRS(args) {

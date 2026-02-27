@@ -3,7 +3,7 @@
 // Description: Better GLB loader
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.4.4 - TRS Pipeline -  Edit euler&quat
+// Version: 1.4.5 - TRS Pipeline -  Bone Palette Optimization
 (function (Scratch) {
     'use strict';
     const D2R = Math.PI / 180;
@@ -110,12 +110,12 @@
             const yaw_y = Math.atan2(2 * (w * y + z * x), 1 - 2 * (x * x + y * y));
             // Roll (Z)
             const roll_z = Math.atan2(2 * (w * z + x * y), 1 - 2 * (x * x + z * z));
-            return [pitch_x * R2D, yaw_y * R2D, roll_z * R2D];
+            return[pitch_x * R2D, yaw_y * R2D, roll_z * R2D];
         }
     };
 
     let models = {};
-    let modelOrder = [];
+    let modelOrder =[];
 
     class OmniGLB {
         _lp(v) {
@@ -128,12 +128,13 @@
         getInfo() {
             return {
                 id: 'omniGLB',
+                docsURI: 'https://github.com/JoyFul114514/Conf-Engine',
                 name: 'OmniGLB',
                 color1: '#7db4b2',
-                blocks: [
+                blocks:[
                     { blockType: Scratch.BlockType.LABEL, text: "场景&内存" },
                     { opcode: 'parseScene', blockType: Scratch.BlockType.COMMAND, text: '加载 GLB [STR] 命名为 [MID]', arguments: { STR: { type: 'string', defaultValue: '' }, MID: { type: 'string', defaultValue: 'model_1' } } },
-                    { opcode: 'flushModel', blockType: Scratch.BlockType.COMMAND, text: '释放模型 [MI] 顶点缓存', arguments: { MI: { type: 'number', defaultValue: 0 } } },
+                    { opcode: 'flushModel', blockType: Scratch.BlockType.COMMAND, text: '释放模型[MI] 顶点缓存', arguments: { MI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'clearAll', blockType: Scratch.BlockType.COMMAND, text: '释放所有' },
                     { blockType: Scratch.BlockType.LABEL, text: "索引映射" },
                     { opcode: 'getModelCount', blockType: Scratch.BlockType.REPORTER, text: '总模型数' },
@@ -144,11 +145,11 @@
                     { blockType: Scratch.BlockType.LABEL, text: "节点变换" },
                     { opcode: 'setNodeTransform', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 节点 [BI] 设置 TRS [TRS]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, TRS: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' } } },
                     { opcode: 'getNodeTransform', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 的 TRS', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 } } },
-                    { opcode: 'updateHierarchy', blockType: Scratch.BlockType.COMMAND, text: '更新模型 [MI] 的节点变换', arguments: { MI: { type: 'number', defaultValue: 0 } } },
+                    { opcode: 'updateHierarchy', blockType: Scratch.BlockType.COMMAND, text: '更新模型[MI] 的节点变换', arguments: { MI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'createTRS', blockType: Scratch.BlockType.REPORTER, text: '构造 TRS  位移[PX] [PY] [PZ] 旋转 [RX] [RY] [RZ] 缩放 [SX] [SY] [SZ]', arguments: { PX: { type: 'number', defaultValue: 0 }, PY: { type: 'number', defaultValue: 0 }, PZ: { type: 'number', defaultValue: 0 }, RX: { type: 'number', defaultValue: 0 }, RY: { type: 'number', defaultValue: 0 }, RZ: { type: 'number', defaultValue: 0 }, SX: { type: 'number', defaultValue: 1 }, SY: { type: 'number', defaultValue: 1 }, SZ: { type: 'number', defaultValue: 1 } } }, // 要用欧拉角
-                    { opcode: 'decomposeTRS', blockType: Scratch.BlockType.REPORTER, text: '分解 TRS [TRS] 的 [TYPE] [AXIS] 分量', arguments: { TRS: { type: Scratch.ArgumentType.STRING, defaultValue: '[0,0,0,0,0,0,1,1,1,1]' }, TYPE: { type: Scratch.ArgumentType.STRING, menu: 'TRSType' }, AXIS: { type: Scratch.ArgumentType.STRING, menu: 'Axis' } } },
+                    { opcode: 'decomposeTRS', blockType: Scratch.BlockType.REPORTER, text: '分解 TRS[TRS] 的 [TYPE] [AXIS] 分量', arguments: { TRS: { type: Scratch.ArgumentType.STRING, defaultValue: '[0,0,0,0,0,0,1,1,1,1]' }, TYPE: { type: Scratch.ArgumentType.STRING, menu: 'TRSType' }, AXIS: { type: Scratch.ArgumentType.STRING, menu: 'Axis' } } },
                     { opcode: 'lerpTRS', blockType: Scratch.BlockType.REPORTER, text: '插值 TRS A:[TRSA] B:[TRSB] 进度:[T]', arguments: { TRSA: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, TRSB: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, T: { type: 'number', defaultValue: 0.5 } } },
-                
+
                     { blockType: Scratch.BlockType.LABEL, text: "节点信息" },
                     { opcode: 'getNodeCount', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 的节点总数', arguments: { MI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'getNodeInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 的 [INFO]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, INFO: { type: 'string', menu: 'nodeMenu' } } },
@@ -161,6 +162,7 @@
                     { blockType: Scratch.BlockType.LABEL, text: "动画控制" },
                     { opcode: 'activateAnimation', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 激活动画 [NAME]', arguments: { MI: { type: 'number', defaultValue: 0 }, NAME: { type: 'string', defaultValue: 'Run' } } },
                     { opcode: 'setAnimationTime', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 设置激活动画时刻 [TIME]', arguments: { MI: { type: 'number', defaultValue: 0 }, TIME: { type: 'number', defaultValue: 0 } } },
+                    {opcode: 'getAnimationDuration',blockType: Scratch.BlockType.REPORTER,text: '获取模型 [MI] 激活动画 [NAME] 的时长', arguments: { MI: { type: 'number', defaultValue: 0 }, NAME: { type: 'string', defaultValue: '' }}},
                     { opcode: 'hasAnimationTrack', blockType: Scratch.BlockType.BOOLEAN, text: '模型 [MI] 节点 [BI] 当前动画有轨道？', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'getActiveAnimInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 激活动画的 TRS', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 } } },
 
@@ -169,10 +171,10 @@
                     { opcode: 'setNodePose', blockType: Scratch.BlockType.COMMAND, text: '设置节点 [BI] 矩阵 [MAT]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, MAT: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } } }
                 ],
                 menus: {
-                    nodeMenu: { items: ['node_id', 'parent_index', 'current_matrix'] },
-                    TRSType: {acceptReporters: true,items: [ { text: '位移 (Position)', value: 'T' }, { text: '旋转 (Euler)', value: 'R' }, { text: '缩放 (Scale)', value: 'S' }]},
-                    Axis: {acceptReporters: true,items: ['X', 'Y', 'Z']},
-                    meshMenu: { items: ['name', 'material_name', 'texture_name', 'position', 'uv', 'node_indices', 'node_weights'] },
+                    nodeMenu: { items:['node_id', 'parent_index', 'current_matrix', 'current_TRS', 'original_TRS'] },
+                    TRSType: { acceptReporters: true, items:[{ text: '位移 (Position)', value: 'T' }, { text: '旋转 (Euler)', value: 'R' }, { text: '缩放 (Scale)', value: 'S' }] },
+                    Axis: { acceptReporters: true, items:['X', 'Y', 'Z'] },
+                    meshMenu: { items:['name', 'material_name', 'texture_name', 'position', 'uv', 'node_indices', 'node_weights'] },
                     poseMenu: { items: ['current', 'original'] }
                 }
             };
@@ -224,9 +226,9 @@
                 }
 
                 const nodes = (json.nodes || []).map((n, i) => {
-                    let defT = n.translation || [0, 0, 0];
-                    let defR = n.rotation || [0, 0, 0, 1];
-                    let defS = n.scale || [1, 1, 1];
+                    let defT = n.translation ||[0, 0, 0];
+                    let defR = n.rotation ||[0, 0, 0, 1];
+                    let defS = n.scale ||[1, 1, 1];
 
                     if (n.matrix) {
                         const d = m4.decompose(new Float32Array(n.matrix));
@@ -255,9 +257,9 @@
                     };
                 });
 
-                (json.nodes || []).forEach((n, i) => { if (n.children) n.children.forEach(c => { if (nodes[c]) nodes[c].parent = i; }); });
+                (json.nodes ||[]).forEach((n, i) => { if (n.children) n.children.forEach(c => { if (nodes[c]) nodes[c].parent = i; }); });
 
-                let calcOrder = [];
+                let calcOrder =[];
                 let visited = new Uint8Array(nodes.length);
                 const visitNode = (idx) => { if (visited[idx]) return; visited[idx] = 1; if (nodes[idx].parent !== -1) visitNode(nodes[idx].parent); calcOrder.push(idx); };
                 for (let i = 0; i < nodes.length; i++) visitNode(i);
@@ -272,9 +274,9 @@
                 });
 
                 const geoLib = [];
-                (json.meshes || []).forEach((m, mIdx) => {
+                (json.meshes ||[]).forEach((m, mIdx) => {
                     const primitives = [];
-                    (m.primitives || []).forEach((prim, pIdx) => {
+                    (m.primitives ||[]).forEach((prim, pIdx) => {
                         const idxs = this._getBuf(json, bin, prim.indices);
                         const rP = this._getBuf(json, bin, prim.attributes.POSITION);
                         const rU = this._getBuf(json, bin, prim.attributes.TEXCOORD_0);
@@ -296,45 +298,87 @@
                                 }
                             }
                         }
-                        let p = [], u = [], rawIndices = [], rawWeights = [];
+
+                        let p = [], u = [], rawIndices = [], rawWeights =[];
+                        
+                        // 非常好优化：记录当前网格真正用到的骨骼索引，不然每个网格都上传完整的矩阵给你uniform炸开
+                        let usedJointIndices =[];
+                        let jointMap = new Map();
+
                         const processVertex = (idx) => {
                             if (rP) p.push(rP[idx * 3], rP[idx * 3 + 1], rP[idx * 3 + 2]);
                             if (rU) u.push(rU[idx * 2], rU[idx * 2 + 1]);
                             if (rI && rW) {
-                                for (let j = 0; j < 4; j++) {
-                                    rawIndices.push(rI[idx * 4 + j]);
-                                    rawWeights.push(rW[idx * 4 + j]);
-                                }
+                                // 提取该顶点的 4 根骨骼及权重
+                                let w0 = rW[idx * 4], w1 = rW[idx * 4 + 1], w2 = rW[idx * 4 + 2], w3 = rW[idx * 4 + 3];
+                                let j0 = rI[idx * 4], j1 = rI[idx * 4 + 1], j2 = rI[idx * 4 + 2], j3 = rI[idx * 4 + 3];
+                                
+                                let sum = w0 + w1 + w2 + w3;
+                                
+                                const addJoint = (joint, weight, isFirst) => {
+                                    // 归一化权重。如果所有权重都是0，默认让第一根骨骼权重为1，防止顶点原点塌陷，也支持刚体
+                                    let normWeight = sum > 0 ? weight / sum : (isFirst ? 1 : 0);
+                                    if (normWeight > 0) {
+                                        let mapped = jointMap.get(joint);
+                                        if (mapped === undefined) {
+                                            mapped = usedJointIndices.length;
+                                            jointMap.set(joint, mapped);
+                                            usedJointIndices.push(joint);
+                                        }
+                                        rawIndices.push(mapped);
+                                    } else {
+                                        rawIndices.push(-1); // 零权重骨骼占位符
+                                    }
+                                    rawWeights.push(normWeight);
+                                };
+
+                                addJoint(j0, w0, true);
+                                addJoint(j1, w1, false);
+                                addJoint(j2, w2, false);
+                                addJoint(j3, w3, false);
                             } else {
                                 rawIndices.push(0, 0, 0, 0);
                                 rawWeights.push(1, 0, 0, 0);
                             }
                         };
+                        
                         if (idxs) for (let i = 0; i < idxs.length; i++) processVertex(idxs[i]);
                         else if (rP) for (let i = 0; i < rP.length / 3; i++) processVertex(i);
+
+                        // 修复 0 权重的占位符，指向当前网格有效骨骼的第一个，现在支持刚体了哈哈
+                        if (rI && rW) {
+                            if (usedJointIndices.length === 0) usedJointIndices.push(0);
+                            for (let i = 0; i < rawIndices.length; i++) {
+                                if (rawIndices[i] === -1) rawIndices[i] = 0;
+                            }
+                        }
+
                         primitives.push({
                             name: m.name || `Mesh_${mIdx}_Prim_${pIdx}`,
                             mat: matName,
                             tex: texName,
                             p, u, rawIndices, rawWeights,
-                            isSkinnedData: !!(rI && rW)
+                            isSkinnedData: !!(rI && rW),
+                            usedJointIndices // 保存本图元的局部骨骼列表映射
                         });
                     });
                     geoLib.push(primitives);
                 });
 
-                const renderables = [];
+                const renderables =[];
                 nodes.forEach((node, nIdx) => {
                     if (node.meshIdx !== undefined && geoLib[node.meshIdx]) {
                         const primitives = geoLib[node.meshIdx];
                         primitives.forEach((geo, pIdx) => {
-                            let handles = [], finalIndices = [];
+                            let handles = [], finalIndices =[];
                             if (node.skinIdx !== undefined && json.skins && json.skins[node.skinIdx]) {
-                                handles = json.skins[node.skinIdx].joints;
-                                finalIndices = geo.rawIndices;
+                                const skinJoints = json.skins[node.skinIdx].joints;
+                                // 非常好优化：将网格局部收集到的索引，还原映射到全局 skin 骨骼
+                                handles = geo.usedJointIndices.map(jIdx => skinJoints[jIdx]);
+                                finalIndices = geo.rawIndices; // 此时已经是映射完毕的局部索引用以匹配 handles
                             } else {
-                                handles = [nIdx];
-                                finalIndices = geo.rawIndices;
+                                handles =[nIdx];
+                                finalIndices = geo.rawIndices; // 非蒙皮网格，均为0
                             }
                             renderables.push({
                                 name: `${node.name}_${geo.name}`,
@@ -367,7 +411,7 @@
                         for (let nId in nodeTracksMap) {
                             const raw = nodeTracksMap[nId];
                             const n = nodes[nId];
-                            const allTimes = Array.from(new Set([...(raw.t ? raw.t.times : []), ...(raw.r ? raw.r.times : []), ...(raw.s ? raw.s.times : [])])).sort((a, b) => a - b);
+                            const allTimes = Array.from(new Set([...(raw.t ? raw.t.times : []), ...(raw.r ? raw.r.times :[]), ...(raw.s ? raw.s.times :[])])).sort((a, b) => a - b);
                             if (allTimes.length === 0) continue;
                             const sample = (track, time, def, comps) => {
                                 if (!track) return def;
@@ -392,26 +436,7 @@
                 if (!modelOrder.includes(mid)) modelOrder.push(mid);
             } catch (e) { console.error("GLB 加载失败:", e); }
         }
-        setNodeTransform(args) {
-            const m = models[modelOrder[Math.floor(args.MI)]];
-            const n = m ? m.nodes[Math.floor(args.BI)] : null;
-            if (n) {
-                try {
-                    const trs = JSON.parse(args.TRS);
-                    if (Array.isArray(trs) && trs.length >= 10) {
-                        n.rtT.set([trs[0], trs[1], trs[2]]);
-                        n.rtR.set([trs[3], trs[4], trs[5], trs[6]]);
-                        n.rtS.set([trs[7], trs[8], trs[9]]);
-                    }
-                } catch (e) { }
-            }
-        }
-        getNodeTransform(args) {
-            const m = models[modelOrder[Math.floor(args.MI)]];
-            const n = m ? m.nodes[Math.floor(args.BI)] : null;
-            if (!n) return "[0,0,0, 0,0,0,1, 1,1,1]";
-            return JSON.stringify(this._lp([...n.rtT, ...n.rtR, ...n.rtS]));
-        }
+        
         createTRS(args) {
             const px = Number(args.PX) || 0, py = Number(args.PY) || 0, pz = Number(args.PZ) || 0;
             const rx = Number(args.RX) || 0, ry = Number(args.RY) || 0, rz = Number(args.RZ) || 0;
@@ -472,6 +497,122 @@
             return "[0,0,0, 0,0,0,1, 1,1,1]";
         }
 
+        // ---------------------------------Model--------------------------------
+
+        getModelCount() { return modelOrder.length; }
+        getModelID(args) { return modelOrder[Math.floor(args.MI)] || ""; }
+        getModelIndex(args) { return modelOrder.indexOf(String(args.MID)); }
+        flushModel(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.renderables.forEach(r => { r.geo = null; }); }
+        clearAll() { models = {}; modelOrder =[]; }
+
+        // ---------------------------------Mesh---------------------------------
+
+        getMeshInfo(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            if (!m || !m.renderables[args.MSI]) return "";
+            const r = m.renderables[args.MSI];
+            if (args.INFO === 'name') return r.name;
+            if (args.INFO === 'material_name') return r.mat;
+            if (args.INFO === 'texture_name') return r.tex;
+            let infoKey = args.INFO;
+            if (infoKey === 'bone_indices') infoKey = 'node_indices';
+            if (infoKey === 'bone_weights') infoKey = 'node_weights';
+            const data = r.geo ? r.geo[infoKey] : null;
+            if (Array.isArray(data) || data instanceof Float32Array) return JSON.stringify(this._lp(data));
+            return data || "[]";
+        }
+        getMeshCount(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.renderables.length : 0; }
+        getMeshIndex(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.renderables.findIndex(r => r.name === String(args.MN)) : -1; }
+
+        getSkinningMatrices(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            if (!m || !m.renderables[args.MSI]) return "[]";
+            const r = m.renderables[args.MSI];
+            let out =[];
+            // 此处遍历的 handles 已经是精简后的该网格专属骨骼列表
+            r.handles.forEach(idx => {
+                const node = m.nodes[idx];
+                let mat;
+                if (r.isSkinned) mat = (args.TYPE === '初始' || args.TYPE === 'original') ? m4.multiply(node.bindWorld, node.invBindWorld) : node.skinMatrix;
+                else mat = (args.TYPE === '初始' || args.TYPE === 'original') ? node.bindWorld : node.world;
+                out.push(...Array.from(mat));
+            });
+            return JSON.stringify(this._lp(out));
+        }
+
+        // -----------------------------Node--------------------------------
+
+        getNodeCount(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m && m.nodes ? m.nodes.length : 0; }
+        getNodeInfo(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const nIdx = Math.floor(args.BI);
+            if (!m || !m.nodes || nIdx < 0 || nIdx >= m.nodes.length) return "";
+            const n = m.nodes[nIdx];
+            switch (args.INFO) {
+                case 'node_id': return n.name;
+                case 'parent_index': return n.parent;
+                case 'current_matrix': return JSON.stringify(this._lp(n.world));
+                case 'original_TRS': {
+                    const d = m4.decompose(n.bindWorld);
+                    return JSON.stringify(this._lp([...d.t, ...d.r, ...d.s]));
+                }
+                case 'current_TRS':
+                    const d = m4.decompose(n.world);
+                    return JSON.stringify(this._lp([...d.t, ...d.r, ...d.s]));
+                default: return "";
+            }
+        }
+        setNodeTransform(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const n = m ? m.nodes[Math.floor(args.BI)] : null;
+            if (n) {
+                try {
+                    const trs = JSON.parse(args.TRS);
+                    if (Array.isArray(trs) && trs.length >= 10) {
+                        n.rtT.set([trs[0], trs[1], trs[2]]);
+                        n.rtR.set([trs[3], trs[4], trs[5], trs[6]]);
+                        n.rtS.set([trs[7], trs[8], trs[9]]);
+                    }
+                } catch (e) { }
+            }
+        }
+        updateHierarchy(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            if (!m) return;
+            const localMat = new Float32Array(16);
+            m.calcOrder.forEach(idx => {
+                const n = m.nodes[idx];
+                m4.fromRotationTranslation(n.rtR, n.rtT, n.rtS, localMat);
+                if (n.parent === -1) n.world.set(localMat);
+                else n.world.set(m4.multiply(m.nodes[n.parent].world, localMat));
+                n.skinMatrix.set(m4.multiply(n.world, n.invBindWorld));
+            });
+        }
+        getNodeTransform(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const n = m ? m.nodes[Math.floor(args.BI)] : null;
+            if (!n) return "[0,0,0, 0,0,0,1, 1,1,1]";
+            return JSON.stringify(this._lp([...n.rtT, ...n.rtR, ...n.rtS]));
+        }
+
+        // ----------------------------Animation-----------------------------
+
+        activateAnimation(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.activeAnim = String(args.NAME); }
+        setAnimationTime(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.activeTime = Number(args.TIME); }
+        getAnimationDuration(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            if (!m) return 0;
+            // 如果没填名字就获取当前激活动画
+            const animName = args.NAME || m.activeAnim;
+            const anim = m.animations[animName];
+            return anim ? anim.duration : 0;
+        }
+        hasAnimationTrack(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const nIdx = Math.floor(args.BI);
+            if (!m || !m.activeAnim || !m.animations[m.activeAnim]) return false;
+            return !!m.animations[m.activeAnim].bakedTracks[nIdx];
+        }
         getActiveAnimInfo(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             const nIdx = Math.floor(args.BI);
@@ -497,86 +638,7 @@
             return JSON.stringify(this._lp([...t, ...r, ...s]));
         }
 
-        updateHierarchy(args) {
-            const m = models[modelOrder[Math.floor(args.MI)]];
-            if (!m) return;
-            const localMat = new Float32Array(16);
-            m.calcOrder.forEach(idx => {
-                const n = m.nodes[idx];
-                m4.fromRotationTranslation(n.rtR, n.rtT, n.rtS, localMat);
-                if (n.parent === -1) n.world.set(localMat);
-                else n.world.set(m4.multiply(m.nodes[n.parent].world, localMat));
-                n.skinMatrix.set(m4.multiply(n.world, n.invBindWorld));
-            });
-        }
-        hasAnimationTrack(args) {
-            const m = models[modelOrder[Math.floor(args.MI)]];
-            const nIdx = Math.floor(args.BI);
-            if (!m || !m.activeAnim || !m.animations[m.activeAnim]) return false;
-            return !!m.animations[m.activeAnim].bakedTracks[nIdx];
-        }
-
-        getMeshInfo(args) {
-            const m = models[modelOrder[Math.floor(args.MI)]];
-            if (!m || !m.renderables[args.MSI]) return "";
-            const r = m.renderables[args.MSI];
-            if (args.INFO === 'name') return r.name;
-            if (args.INFO === 'material_name') return r.mat;
-            if (args.INFO === 'texture_name') return r.tex;
-            let infoKey = args.INFO;
-            if (infoKey === 'bone_indices') infoKey = 'node_indices';
-            if (infoKey === 'bone_weights') infoKey = 'node_weights';
-            const data = r.geo ? r.geo[infoKey] : null;
-            if (Array.isArray(data) || data instanceof Float32Array) return JSON.stringify(this._lp(data));
-            return data || "[]";
-        }
-
-        getSkinningMatrices(args) {
-            const m = models[modelOrder[Math.floor(args.MI)]];
-            if (!m || !m.renderables[args.MSI]) return "[]";
-            const r = m.renderables[args.MSI];
-            let out = [];
-            r.handles.forEach(idx => {
-                const node = m.nodes[idx];
-                let mat;
-                if (r.isSkinned) mat = (args.TYPE === '初始' || args.TYPE === 'original') ? m4.multiply(node.bindWorld, node.invBindWorld) : node.skinMatrix;
-                else mat = (args.TYPE === '初始' || args.TYPE === 'original') ? node.bindWorld : node.world;
-                out.push(...Array.from(mat));
-            });
-            return JSON.stringify(this._lp(out));
-        }
-
-        getNodeCount(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m && m.nodes ? m.nodes.length : 0; }
-
-        getNodeInfo(args) {
-            const m = models[modelOrder[Math.floor(args.MI)]];
-            const nIdx = Math.floor(args.BI);
-            if (!m || !m.nodes || nIdx < 0 || nIdx >= m.nodes.length) return "";
-            const n = m.nodes[nIdx];
-            if (args.INFO === 'pose_matrix') return JSON.stringify(this._lp(m4.fromRotationTranslation(n.rtR, n.rtT, n.rtS)));
-            if (args.INFO === 'original_matrix') return JSON.stringify(this._lp(n.bindWorld));
-            if (args.INFO === 'current_matrix') return JSON.stringify(this._lp(n.world));
-            if (args.INFO === 'bone_id' || args.INFO === 'node_id') return n.name;
-            if (args.INFO === 'parent_index') return n.parent !== undefined ? n.parent : -1;
-            return "";
-        }
-
-        activateAnimation(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.activeAnim = String(args.NAME); }
-        setAnimationTime(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.activeTime = Number(args.TIME); }
-        getMeshCount(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.renderables.length : 0; }
-        getMeshIndex(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.renderables.findIndex(r => r.name === String(args.MN)) : -1; }
-        getModelCount() { return modelOrder.length; }
-        getModelID(args) { return modelOrder[Math.floor(args.MI)] || ""; }
-        getModelIndex(args) { return modelOrder.indexOf(String(args.MID)); }
-        flushModel(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.renderables.forEach(r => { r.geo = null; }); }
-        clearAll() { models = {}; modelOrder = []; }
-
-        matrixToEulerDegrees(args) {
-            const m = (typeof args.M === 'string' ? JSON.parse(args.M) : args.M) || [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-            if (m.length < 16) return "[0,0,0]";
-            const { r } = m4.decompose(new Float32Array(m));
-            return JSON.stringify(this._lp(m4.quatToEuler(r)));
-        }
+        // ---------------------------DeBug---------------------------
 
         setNodePose(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
@@ -591,6 +653,13 @@
                 } catch (e) { }
             }
         }
+        matrixToEulerDegrees(args) {
+            const m = (typeof args.M === 'string' ? JSON.parse(args.M) : args.M) ||[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+            if (m.length < 16) return "[0,0,0]";
+            const { r } = m4.decompose(new Float32Array(m));
+            return JSON.stringify(this._lp(m4.quatToEuler(r)));
+        }
+        
     }
     Scratch.extensions.register(new OmniGLB());
 })(Scratch);

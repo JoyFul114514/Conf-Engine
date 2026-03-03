@@ -3,7 +3,7 @@
 // Description: Better GLB loader
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.4.5 - TRS Pipeline -  Bone Palette Optimization
+// Version: 1.4.6 - Added Node/Mesh Mapping
 (function (Scratch) {
     'use strict';
     const D2R = Math.PI / 180;
@@ -88,7 +88,7 @@
             const c1 = Math.cos(x / 2), c2 = Math.cos(y / 2), c3 = Math.cos(z / 2);
             const s1 = Math.sin(x / 2), s2 = Math.sin(y / 2), s3 = Math.sin(z / 2);
 
-            // 正确的 YXZ ，实际ZXY
+            //  YXZ ，实际顺序ZXY，类比FPS
             return new Float32Array([
                 s1 * c2 * c3 + c1 * s2 * s3, // x
                 c1 * s2 * c3 - s1 * c2 * s3, // y
@@ -110,12 +110,12 @@
             const yaw_y = Math.atan2(2 * (w * y + z * x), 1 - 2 * (x * x + y * y));
             // Roll (Z)
             const roll_z = Math.atan2(2 * (w * z + x * y), 1 - 2 * (x * x + z * z));
-            return[pitch_x * R2D, yaw_y * R2D, roll_z * R2D];
+            return [pitch_x * R2D, yaw_y * R2D, roll_z * R2D];
         }
     };
 
     let models = {};
-    let modelOrder =[];
+    let modelOrder = [];
 
     class OmniGLB {
         _lp(v) {
@@ -131,16 +131,20 @@
                 docsURI: 'https://github.com/JoyFul114514/Conf-Engine',
                 name: 'OmniGLB',
                 color1: '#7db4b2',
-                blocks:[
+                blocks: [
                     { blockType: Scratch.BlockType.LABEL, text: "场景&内存" },
-                    { opcode: 'parseScene', blockType: Scratch.BlockType.COMMAND, text: '加载 GLB [STR] 命名为 [MID]', arguments: { STR: { type: 'string', defaultValue: '' }, MID: { type: 'string', defaultValue: 'model_1' } } },
+                    { opcode: 'getModelCount', blockType: Scratch.BlockType.REPORTER, text: '总模型数' },
+                    { opcode: 'parseScene', blockType: Scratch.BlockType.COMMAND, text: '加载 GLB [STR] 命名为 [MID]', arguments: { STR: { type: 'string', defaultValue: '' }, MID: { type: 'string', defaultValue: 'sample' } } },
                     { opcode: 'flushModel', blockType: Scratch.BlockType.COMMAND, text: '释放模型[MI] 顶点缓存', arguments: { MI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'clearAll', blockType: Scratch.BlockType.COMMAND, text: '释放所有' },
+
                     { blockType: Scratch.BlockType.LABEL, text: "索引映射" },
-                    { opcode: 'getModelCount', blockType: Scratch.BlockType.REPORTER, text: '总模型数' },
                     { opcode: 'getModelID', blockType: Scratch.BlockType.REPORTER, text: '索引 [MI] 的模型 ID', arguments: { MI: { type: 'number', defaultValue: 0 } } },
-                    { opcode: 'getModelIndex', blockType: Scratch.BlockType.REPORTER, text: 'ID [MID] 的模型索引', arguments: { MID: { type: 'string', defaultValue: 'model' } } },
-                    { opcode: 'getMeshIndex', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 中网格名为[MN] 的索引', arguments: { MI: { type: 'number', defaultValue: 0 }, MN: { type: 'string', defaultValue: '' } } },
+                    { opcode: 'getModelIndex', blockType: Scratch.BlockType.REPORTER, text: 'ID [MID] 的模型索引', arguments: { MID: { type: 'string', defaultValue: 'sample' } } },
+                    { opcode: 'getNodeID', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 节点索引 [BI] 的 ID', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 } } },
+                    { opcode: 'getNodeIndex', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 节点名 [BN] 的索引', arguments: { MI: { type: 'number', defaultValue: 0 }, BN: { type: 'string', defaultValue: 'sample_node_0' } } },
+                    { opcode: 'getMeshID', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 网格索引 [MSI] 的 ID', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 } } },
+                    { opcode: 'getMeshIndex', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 中网格名为[MN] 的索引', arguments: { MI: { type: 'number', defaultValue: 0 }, MN: { type: 'string', defaultValue: 'sample_mesh_0' } } },
 
                     { blockType: Scratch.BlockType.LABEL, text: "节点变换" },
                     { opcode: 'setNodeTransform', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 节点 [BI] 设置 TRS [TRS]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, TRS: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' } } },
@@ -149,6 +153,7 @@
                     { opcode: 'createTRS', blockType: Scratch.BlockType.REPORTER, text: '构造 TRS  位移[PX] [PY] [PZ] 旋转 [RX] [RY] [RZ] 缩放 [SX] [SY] [SZ]', arguments: { PX: { type: 'number', defaultValue: 0 }, PY: { type: 'number', defaultValue: 0 }, PZ: { type: 'number', defaultValue: 0 }, RX: { type: 'number', defaultValue: 0 }, RY: { type: 'number', defaultValue: 0 }, RZ: { type: 'number', defaultValue: 0 }, SX: { type: 'number', defaultValue: 1 }, SY: { type: 'number', defaultValue: 1 }, SZ: { type: 'number', defaultValue: 1 } } }, // 要用欧拉角
                     { opcode: 'decomposeTRS', blockType: Scratch.BlockType.REPORTER, text: '分解 TRS[TRS] 的 [TYPE] [AXIS] 分量', arguments: { TRS: { type: Scratch.ArgumentType.STRING, defaultValue: '[0,0,0,0,0,0,1,1,1,1]' }, TYPE: { type: Scratch.ArgumentType.STRING, menu: 'TRSType' }, AXIS: { type: Scratch.ArgumentType.STRING, menu: 'Axis' } } },
                     { opcode: 'lerpTRS', blockType: Scratch.BlockType.REPORTER, text: '插值 TRS A:[TRSA] B:[TRSB] 进度:[T]', arguments: { TRSA: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, TRSB: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, T: { type: 'number', defaultValue: 0.5 } } },
+                    { opcode: 'addTRS', blockType: Scratch.BlockType.REPORTER, text: '叠加 TRS A:[TRSA] B:[TRSB]', arguments: { TRSA: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' }, TRSB: { type: 'string', defaultValue: '[0,0,0, 0,0,0,1, 1,1,1]' } } },
 
                     { blockType: Scratch.BlockType.LABEL, text: "节点信息" },
                     { opcode: 'getNodeCount', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 的节点总数', arguments: { MI: { type: 'number', defaultValue: 0 } } },
@@ -162,7 +167,7 @@
                     { blockType: Scratch.BlockType.LABEL, text: "动画控制" },
                     { opcode: 'activateAnimation', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 激活动画 [NAME]', arguments: { MI: { type: 'number', defaultValue: 0 }, NAME: { type: 'string', defaultValue: 'Run' } } },
                     { opcode: 'setAnimationTime', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 设置激活动画时刻 [TIME]', arguments: { MI: { type: 'number', defaultValue: 0 }, TIME: { type: 'number', defaultValue: 0 } } },
-                    {opcode: 'getAnimationDuration',blockType: Scratch.BlockType.REPORTER,text: '获取模型 [MI] 激活动画 [NAME] 的时长', arguments: { MI: { type: 'number', defaultValue: 0 }, NAME: { type: 'string', defaultValue: '' }}},
+                    { opcode: 'getAnimationDuration', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 激活动画 [NAME] 的时长', arguments: { MI: { type: 'number', defaultValue: 0 }, NAME: { type: 'string', defaultValue: '' } } },
                     { opcode: 'hasAnimationTrack', blockType: Scratch.BlockType.BOOLEAN, text: '模型 [MI] 节点 [BI] 当前动画有轨道？', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'getActiveAnimInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 节点 [BI] 激活动画的 TRS', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 } } },
 
@@ -171,10 +176,10 @@
                     { opcode: 'setNodePose', blockType: Scratch.BlockType.COMMAND, text: '设置节点 [BI] 矩阵 [MAT]', arguments: { MI: { type: 'number', defaultValue: 0 }, BI: { type: 'number', defaultValue: 0 }, MAT: { type: 'string', defaultValue: '[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]' } } }
                 ],
                 menus: {
-                    nodeMenu: { items:['node_id', 'parent_index', 'current_matrix', 'current_TRS', 'original_TRS'] },
-                    TRSType: { acceptReporters: true, items:[{ text: '位移 (Position)', value: 'T' }, { text: '旋转 (Euler)', value: 'R' }, { text: '缩放 (Scale)', value: 'S' }] },
-                    Axis: { acceptReporters: true, items:['X', 'Y', 'Z'] },
-                    meshMenu: { items:['name', 'material_name', 'texture_name', 'position', 'uv', 'node_indices', 'node_weights'] },
+                    nodeMenu: { items: ['node_id', 'parent_index', 'current_matrix', 'current_TRS', 'original_TRS'] },
+                    TRSType: { acceptReporters: true, items: [{ text: '位移', value: 'T' }, { text: '旋转', value: 'R' }, { text: '缩放', value: 'S' }] },
+                    Axis: { acceptReporters: true, items: ['X', 'Y', 'Z'] },
+                    meshMenu: { items: ['name', 'material_name', 'texture_name', 'position', 'uv', 'node_indices', 'node_weights'] },
                     poseMenu: { items: ['current', 'original'] }
                 }
             };
@@ -226,9 +231,9 @@
                 }
 
                 const nodes = (json.nodes || []).map((n, i) => {
-                    let defT = n.translation ||[0, 0, 0];
-                    let defR = n.rotation ||[0, 0, 0, 1];
-                    let defS = n.scale ||[1, 1, 1];
+                    let defT = n.translation || [0, 0, 0];
+                    let defR = n.rotation || [0, 0, 0, 1];
+                    let defS = n.scale || [1, 1, 1];
 
                     if (n.matrix) {
                         const d = m4.decompose(new Float32Array(n.matrix));
@@ -257,9 +262,9 @@
                     };
                 });
 
-                (json.nodes ||[]).forEach((n, i) => { if (n.children) n.children.forEach(c => { if (nodes[c]) nodes[c].parent = i; }); });
+                (json.nodes || []).forEach((n, i) => { if (n.children) n.children.forEach(c => { if (nodes[c]) nodes[c].parent = i; }); });
 
-                let calcOrder =[];
+                let calcOrder = [];
                 let visited = new Uint8Array(nodes.length);
                 const visitNode = (idx) => { if (visited[idx]) return; visited[idx] = 1; if (nodes[idx].parent !== -1) visitNode(nodes[idx].parent); calcOrder.push(idx); };
                 for (let i = 0; i < nodes.length; i++) visitNode(i);
@@ -274,9 +279,9 @@
                 });
 
                 const geoLib = [];
-                (json.meshes ||[]).forEach((m, mIdx) => {
+                (json.meshes || []).forEach((m, mIdx) => {
                     const primitives = [];
-                    (m.primitives ||[]).forEach((prim, pIdx) => {
+                    (m.primitives || []).forEach((prim, pIdx) => {
                         const idxs = this._getBuf(json, bin, prim.indices);
                         const rP = this._getBuf(json, bin, prim.attributes.POSITION);
                         const rU = this._getBuf(json, bin, prim.attributes.TEXCOORD_0);
@@ -299,10 +304,10 @@
                             }
                         }
 
-                        let p = [], u = [], rawIndices = [], rawWeights =[];
-                        
+                        let p = [], u = [], rawIndices = [], rawWeights = [];
+
                         // 非常好优化：记录当前网格真正用到的骨骼索引，不然每个网格都上传完整的矩阵给你uniform炸开
-                        let usedJointIndices =[];
+                        let usedJointIndices = [];
                         let jointMap = new Map();
 
                         const processVertex = (idx) => {
@@ -312,9 +317,9 @@
                                 // 提取该顶点的 4 根骨骼及权重
                                 let w0 = rW[idx * 4], w1 = rW[idx * 4 + 1], w2 = rW[idx * 4 + 2], w3 = rW[idx * 4 + 3];
                                 let j0 = rI[idx * 4], j1 = rI[idx * 4 + 1], j2 = rI[idx * 4 + 2], j3 = rI[idx * 4 + 3];
-                                
+
                                 let sum = w0 + w1 + w2 + w3;
-                                
+
                                 const addJoint = (joint, weight, isFirst) => {
                                     // 归一化权重。如果所有权重都是0，默认让第一根骨骼权重为1，防止顶点原点塌陷，也支持刚体
                                     let normWeight = sum > 0 ? weight / sum : (isFirst ? 1 : 0);
@@ -341,7 +346,7 @@
                                 rawWeights.push(1, 0, 0, 0);
                             }
                         };
-                        
+
                         if (idxs) for (let i = 0; i < idxs.length; i++) processVertex(idxs[i]);
                         else if (rP) for (let i = 0; i < rP.length / 3; i++) processVertex(i);
 
@@ -365,19 +370,19 @@
                     geoLib.push(primitives);
                 });
 
-                const renderables =[];
+                const renderables = [];
                 nodes.forEach((node, nIdx) => {
                     if (node.meshIdx !== undefined && geoLib[node.meshIdx]) {
                         const primitives = geoLib[node.meshIdx];
                         primitives.forEach((geo, pIdx) => {
-                            let handles = [], finalIndices =[];
+                            let handles = [], finalIndices = [];
                             if (node.skinIdx !== undefined && json.skins && json.skins[node.skinIdx]) {
                                 const skinJoints = json.skins[node.skinIdx].joints;
                                 // 非常好优化：将网格局部收集到的索引，还原映射到全局 skin 骨骼
                                 handles = geo.usedJointIndices.map(jIdx => skinJoints[jIdx]);
                                 finalIndices = geo.rawIndices; // 此时已经是映射完毕的局部索引用以匹配 handles
                             } else {
-                                handles =[nIdx];
+                                handles = [nIdx];
                                 finalIndices = geo.rawIndices; // 非蒙皮网格，均为0
                             }
                             renderables.push({
@@ -411,7 +416,7 @@
                         for (let nId in nodeTracksMap) {
                             const raw = nodeTracksMap[nId];
                             const n = nodes[nId];
-                            const allTimes = Array.from(new Set([...(raw.t ? raw.t.times : []), ...(raw.r ? raw.r.times :[]), ...(raw.s ? raw.s.times :[])])).sort((a, b) => a - b);
+                            const allTimes = Array.from(new Set([...(raw.t ? raw.t.times : []), ...(raw.r ? raw.r.times : []), ...(raw.s ? raw.s.times : [])])).sort((a, b) => a - b);
                             if (allTimes.length === 0) continue;
                             const sample = (track, time, def, comps) => {
                                 if (!track) return def;
@@ -436,7 +441,7 @@
                 if (!modelOrder.includes(mid)) modelOrder.push(mid);
             } catch (e) { console.error("GLB 加载失败:", e); }
         }
-        
+
         createTRS(args) {
             const px = Number(args.PX) || 0, py = Number(args.PY) || 0, pz = Number(args.PZ) || 0;
             const rx = Number(args.RX) || 0, ry = Number(args.RY) || 0, rz = Number(args.RZ) || 0;
@@ -453,7 +458,7 @@
                 if (typeof args.TRS === 'string') {
                     data = JSON.parse(args.TRS);
                 } else {
-                    data = args.TRS; // 如果已经是数组，直接赋值，但是scratch只能传string？
+                    data = args.TRS; // 如果已经是数组，直接赋值，但是scratch只能传string，留后面内嵌simple用
                 }
                 if (!Array.isArray(data) || data.length < 10) return 0;
                 const type = args.TYPE;
@@ -486,7 +491,7 @@
                     const qa = trsa.slice(3, 7), qb = trsb.slice(3, 7);
                     const sa = trsa.slice(7, 10), sb = trsb.slice(7, 10);
 
-                    // 分开插值: P, S 线性，Q 球面线性
+                    // P, S 线性，Q 球面线性
                     const p = m4.lerp(pa, pb, t);
                     const q = m4.slerp(qa, qb, t);
                     const s = m4.lerp(sa, sb, t);
@@ -496,14 +501,66 @@
             } catch (e) { }
             return "[0,0,0, 0,0,0,1, 1,1,1]";
         }
+        addTRS(args) {
+            try {
+                const a = JSON.parse(args.TRSA);
+                const b = JSON.parse(args.TRSB);
+
+                if (Array.isArray(a) && Array.isArray(b) && a.length >= 10 && b.length >= 10) {
+                    // 位移相加
+                    const px = a[0] + b[0];
+                    const py = a[1] + b[1];
+                    const pz = a[2] + b[2];
+                    // 四元数乘法
+                    const x1 = a[3], y1 = a[4], z1 = a[5], w1 = a[6];
+                    const x2 = b[3], y2 = b[4], z2 = b[5], w2 = b[6];
+
+                    const rx = x1 * w2 + w1 * x2 + y1 * z2 - z1 * y2;
+                    const ry = y1 * w2 + w1 * y2 + z1 * x2 - x1 * z2;
+                    const rz = z1 * w2 + w1 * z2 + x1 * y2 - y1 * x2;
+                    const rw = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2;
+                    // 缩放相乘
+                    const sx = a[7] * b[7];
+                    const sy = a[8] * b[8];
+                    const sz = a[9] * b[9];
+
+                    return JSON.stringify(this._lp([px, py, pz, rx, ry, rz, rw, sx, sy, sz]));
+                }
+            } catch (e) {
+                console.error("OmniGLB addTRS Error:", e);
+            }
+            return args.TRSA;
+        }
+
+        // ---------------------------------Mapping--------------------------------
+
+        getModelID(args) { return modelOrder[Math.floor(args.MI)] || ""; }
+        getModelIndex(args) { return modelOrder.indexOf(String(args.MID)); }
+
+        getNodeID(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const nIdx = Math.floor(args.BI);
+            return (m && m.nodes && m.nodes[nIdx]) ? m.nodes[nIdx].name : "";
+        }
+        getNodeIndex(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            if (!m || !m.nodes) return -1;
+            const name = String(args.BN);
+            return m.nodes.findIndex(n => n.name === name);
+        }
+
+        getMeshID(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            const msi = Math.floor(args.MSI);
+            return (m && m.renderables && m.renderables[msi]) ? m.renderables[msi].name : "";
+        }
+        getMeshIndex(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.renderables.findIndex(r => r.name === String(args.MN)) : -1; }
 
         // ---------------------------------Model--------------------------------
 
         getModelCount() { return modelOrder.length; }
-        getModelID(args) { return modelOrder[Math.floor(args.MI)] || ""; }
-        getModelIndex(args) { return modelOrder.indexOf(String(args.MID)); }
         flushModel(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.renderables.forEach(r => { r.geo = null; }); }
-        clearAll() { models = {}; modelOrder =[]; }
+        clearAll() { models = {}; modelOrder = []; }
 
         // ---------------------------------Mesh---------------------------------
 
@@ -522,13 +579,11 @@
             return data || "[]";
         }
         getMeshCount(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.renderables.length : 0; }
-        getMeshIndex(args) { const m = models[modelOrder[Math.floor(args.MI)]]; return m ? m.renderables.findIndex(r => r.name === String(args.MN)) : -1; }
-
         getSkinningMatrices(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             if (!m || !m.renderables[args.MSI]) return "[]";
             const r = m.renderables[args.MSI];
-            let out =[];
+            let out = [];
             // 此处遍历的 handles 已经是精简后的该网格专属骨骼列表
             r.handles.forEach(idx => {
                 const node = m.nodes[idx];
@@ -654,12 +709,12 @@
             }
         }
         matrixToEulerDegrees(args) {
-            const m = (typeof args.M === 'string' ? JSON.parse(args.M) : args.M) ||[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+            const m = (typeof args.M === 'string' ? JSON.parse(args.M) : args.M) || [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
             if (m.length < 16) return "[0,0,0]";
             const { r } = m4.decompose(new Float32Array(m));
             return JSON.stringify(this._lp(m4.quatToEuler(r)));
         }
-        
+
     }
     Scratch.extensions.register(new OmniGLB());
 })(Scratch);

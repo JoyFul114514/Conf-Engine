@@ -3,9 +3,15 @@
 // Description: Better GLB loader
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.4.7.2 - Added Direct List Injection & Bug Fixed
+// Version: 1.4.8 - Added Direct List Injection
 (function (Scratch) {
     'use strict';
+
+    let runtime = null; // 参考的JSON扩展，在vm被篡改前劫持
+    if (Scratch.vm) {
+        runtime = Scratch.vm.runtime;
+    }
+
     const D2R = Math.PI / 180;
     const R2D = 180 / Math.PI;
 
@@ -22,7 +28,6 @@
         out[12] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30; out[13] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31; out[14] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32; out[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
         return out;
     }
-
     function inverse(m) {
         const out = new Float32Array(16);
         const m00 = m[0], m01 = m[1], m02 = m[2], m03 = m[3], m10 = m[4], m11 = m[5], m12 = m[6], m13 = m[7], m20 = m[8], m21 = m[9], m22 = m[10], m23 = m[11], m30 = m[12], m31 = m[13], m32 = m[14], m33 = m[15];
@@ -118,6 +123,11 @@
     let modelOrder = [];
 
     class OmniGLB {
+
+        constructor() {
+            this._boundGetAllLists = this._getAllLists.bind(this);
+        }
+
         _lp(v) {
             if (v instanceof Float32Array || v instanceof Uint16Array || v instanceof Uint8Array || Array.isArray(v)) {
                 return Array.from(v).map(x => Math.round(x * 1000000) / 1000000);
@@ -152,49 +162,33 @@
             }
         }
         _getAllLists() {
-            try {
-                const vm = Scratch.vm;
-                if (!vm || !vm.runtime || !vm.runtime.targets) return [' '];
-
-                const lists = new Set();
-                vm.runtime.targets.forEach(target => {
-                    if (target && target.variables) {
-                        for (const id in target.variables) {
-                            const v = target.variables[id];
-                            if (v && v.type === 'list') {
-                                lists.add(v.name);
-                            }
-                        }
+            if (!runtime || !runtime.targets) return [' '];
+            const lists = new Set();
+            runtime.targets.forEach(target => {
+                if (target.variables) {
+                    for (const id in target.variables) {
+                        const v = target.variables[id];
+                        if (v.type === 'list') lists.add(v.name);
                     }
-                });
-
-                const result = Array.from(lists);
-                return result.length > 0 ? result : [' '];
-            } catch (e) {
-                // 如果 vm 被篡改导致报错，返回一个默认值，防止编辑器崩溃，神笔ccw
-                return ['error_getting_lists'];
-            }
+                }
+            });
+            const result = Array.from(lists);
+            return result.length > 0 ? result : [' '];
         }
-        _setList(listName, data, util) {
-            if (!util || !listName) return;
+        _setList(listName, data) {
+            if (!runtime || !listName) return;
 
             let variable = null;
-            const stage = util.runtime.getTargetForStage();
-            const currentTarget = util.target;
-
-            // 优先在当前角色中找
-            if (currentTarget) {
-                variable = currentTarget.lookupVariableByNameAndType(listName, 'list');
+            const editingTarget = runtime.getEditingTarget();
+            if (editingTarget) {
+                variable = editingTarget.lookupVariableByNameAndType(listName, 'list');
             }
-
-            // 如果没找到，在舞台找
-            if (!variable && stage) {
-                variable = stage.lookupVariableByNameAndType(listName, 'list');
-            }
-
-            // 跨角色搜索
             if (!variable) {
-                for (const target of util.runtime.targets) {
+                const stage = runtime.getTargetForStage();
+                if (stage) variable = stage.lookupVariableByNameAndType(listName, 'list');
+            }
+            if (!variable) {
+                for (const target of runtime.targets) {
                     const found = target.lookupVariableByNameAndType(listName, 'list');
                     if (found && found.name === listName) {
                         variable = found;
@@ -202,7 +196,6 @@
                     }
                 }
             }
-
             if (variable) {
                 if (data === null || data === undefined) {
                     variable.value = [];
@@ -273,7 +266,7 @@
                     Axis: { acceptReporters: true, items: ['X', 'Y', 'Z'] },
                     meshMenu: { items: ['name', 'material_name', 'texture_name', 'position', 'uv', 'node_indices', 'node_weights'] },
                     poseMenu: { items: ['current', 'original'] },
-                    listMenu: { acceptReporters: true, items: '_getAllLists' }
+                    listMenu: { acceptReporters: true, items: '_boundGetAllLists' }
                 }
             };
         }
@@ -660,7 +653,7 @@
             });
             return JSON.stringify(this._lp(out));
         }
-        getMeshInfoToList(args, util) {
+        getMeshInfoToList(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             if (!m || !m.renderables || !m.renderables[Math.floor(args.MSI)]) return;
             const r = m.renderables[Math.floor(args.MSI)];
@@ -677,10 +670,10 @@
                 data = r.geo[infoKey];
             }
 
-            this._setList(args.LIST, data, util); // 传递 utll
+            this._setList(args.LIST, data);
         }
 
-        getSkinningMatricesToList(args, util) {
+        getSkinningMatricesToList(args) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             if (!m || !m.renderables || !m.renderables[Math.floor(args.MSI)]) return;
             const r = m.renderables[Math.floor(args.MSI)];
@@ -697,7 +690,7 @@
                 out.set(mat, i * 16);
             });
 
-            this._setList(args.LIST, out, util);
+            this._setList(args.LIST, out);
         }
 
         // -----------------------------Node--------------------------------

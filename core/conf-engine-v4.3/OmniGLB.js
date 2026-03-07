@@ -3,7 +3,7 @@
 // Description: Better GLB loader
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.4.6 - Added Node/Mesh Mapping
+// Version: 1.4.7 - Added Direct List Injection
 (function (Scratch) {
     'use strict';
     const D2R = Math.PI / 180;
@@ -124,6 +124,89 @@
             }
             return Math.round(v * 1000000) / 1000000;
         }
+        _getBuf(json, bin, accessorIdx) {
+            if (accessorIdx === undefined || accessorIdx === null) return null;
+            const acc = json.accessors[accessorIdx];
+            const bvIdx = acc.bufferView !== undefined ? acc.bufferView : null;
+            let offset = acc.byteOffset || 0;
+            let stride = 0;
+            if (bvIdx !== null) { const bv = json.bufferViews[bvIdx]; offset += (bv.byteOffset || 0); stride = bv.byteStride || 0; }
+            const comps = { 'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16 }[acc.type] || 1;
+            const count = acc.count * comps;
+            const TypedArray = { 5120: Int8Array, 5121: Uint8Array, 5122: Int16Array, 5123: Uint16Array, 5125: Uint32Array, 5126: Float32Array }[acc.componentType];
+            if (!TypedArray) return null;
+            if (stride === 0 || stride === comps * TypedArray.BYTES_PER_ELEMENT) { return new TypedArray(bin, offset, count); }
+            else {
+                const result = new TypedArray(count);
+                const dataView = new DataView(bin);
+                for (let i = 0; i < acc.count; i++) {
+                    const elOffset = offset + i * stride;
+                    for (let j = 0; j < comps; j++) {
+                        const byteOffset = elOffset + j * TypedArray.BYTES_PER_ELEMENT;
+                        if (acc.componentType === 5126) result[i * comps + j] = dataView.getFloat32(byteOffset, true);
+                        else if (acc.componentType === 5123) result[i * comps + j] = dataView.getUint16(byteOffset, true);
+                        else if (acc.componentType === 5121) result[i * comps + j] = dataView.getUint8(byteOffset);
+                    }
+                }
+                return result;
+            }
+        }
+        _getAllLists() {
+            const vm = Scratch.vm;
+            if (!vm) return [' '];
+            const lists = new Set(); // 使用 Set 去重
+            vm.runtime.targets.forEach(target => { // 遍历所有角色和舞台，收集所有列表名
+                for (const id in target.variables) {
+                    const v = target.variables[id];
+                    if (v.type === 'list') {
+                        lists.add(v.name);
+                    }
+                }
+            });
+            const result = Array.from(lists);
+            return result.length > 0 ? result : [' '];
+        }
+        _setList(listName, data) {
+            const vm = Scratch.vm;
+            if (!vm || data === undefined || data === null) return;
+
+            let variable = null;
+            const stage = vm.runtime.getTargetForStage();
+            const editingTarget = vm.runtime.getEditingTarget();
+            // 在当前选中的角色中找
+            if (editingTarget) {
+                variable = editingTarget.lookupVariableByNameAndType(listName, 'list');
+            }
+            // 如果没找到，在舞台找
+            if (!variable && stage) {
+                variable = stage.lookupVariableByNameAndType(listName, 'list');
+            }
+            // 如果还是没找到，遍历所有角色找这个名字的私有列表，但是测试出来还是不能写入私有变量，诡异
+            if (!variable) {
+                const allTargets = vm.runtime.targets;
+                for (let i = 0; i < allTargets.length; i++) {
+                    const target = allTargets[i];
+                    // lookupVariableByNameAndType 会检查该角色自身及其私有变量
+                    const found = target.lookupVariableByNameAndType(listName, 'list');
+                    // 确保匹配
+                    if (found && found.name === listName) {
+                        variable = found;
+                        break;
+                    }
+                }
+            }
+
+            if (variable) {
+                if (Array.isArray(data) || (data.buffer && data.buffer instanceof ArrayBuffer)) {
+                    variable.value = Array.from(data).map(x => typeof x === 'number' ? Math.round(x * 1000000) / 1000000 : x);
+                } else {
+                    variable.value = [String(data)];
+                }
+                variable._monitorUpToDate = false;
+            } else {
+                console.warn(`OmniGLB: 找不到列表 "${listName}"`);
+            }
+        }
 
         getInfo() {
             return {
@@ -162,7 +245,9 @@
                     { blockType: Scratch.BlockType.LABEL, text: "网格数据" },
                     { opcode: 'getMeshCount', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 的网格数量', arguments: { MI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'getMeshInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格[MSI] 的 [INFO]', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, INFO: { type: 'string', menu: 'meshMenu' } } },
+                    { opcode: 'getMeshInfoToList', blockType: Scratch.BlockType.COMMAND, text: '获取模型 [MI] 网格 [MSI] 的 [INFO] 存入列表 [LIST]', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, INFO: { type: 'string', menu: 'meshMenu' }, LIST: { type: 'string', menu: 'listMenu' } } },
                     { opcode: 'getSkinningMatrices', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格 [MSI] 的 [TYPE] 绑定矩阵', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'poseMenu', defaultValue: 'current' } } },
+                    { opcode: 'getSkinningMatricesToList', blockType: Scratch.BlockType.COMMAND, text: '获取模型 [MI] 网格 [MSI] 的 [TYPE] 绑定矩阵存入列表 [LIST]', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'poseMenu', defaultValue: 'current' }, LIST: { type: 'string', menu: 'listMenu' } } },
 
                     { blockType: Scratch.BlockType.LABEL, text: "动画控制" },
                     { opcode: 'activateAnimation', blockType: Scratch.BlockType.COMMAND, text: '模型 [MI] 激活动画 [NAME]', arguments: { MI: { type: 'number', defaultValue: 0 }, NAME: { type: 'string', defaultValue: 'Run' } } },
@@ -180,36 +265,10 @@
                     TRSType: { acceptReporters: true, items: [{ text: '位移', value: 'T' }, { text: '旋转', value: 'R' }, { text: '缩放', value: 'S' }] },
                     Axis: { acceptReporters: true, items: ['X', 'Y', 'Z'] },
                     meshMenu: { items: ['name', 'material_name', 'texture_name', 'position', 'uv', 'node_indices', 'node_weights'] },
-                    poseMenu: { items: ['current', 'original'] }
+                    poseMenu: { items: ['current', 'original'] },
+                    listMenu: { acceptReporters: true, items: '_getAllLists' }
                 }
             };
-        }
-        _getBuf(json, bin, accessorIdx) {
-            if (accessorIdx === undefined || accessorIdx === null) return null;
-            const acc = json.accessors[accessorIdx];
-            const bvIdx = acc.bufferView !== undefined ? acc.bufferView : null;
-            let offset = acc.byteOffset || 0;
-            let stride = 0;
-            if (bvIdx !== null) { const bv = json.bufferViews[bvIdx]; offset += (bv.byteOffset || 0); stride = bv.byteStride || 0; }
-            const comps = { 'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16 }[acc.type] || 1;
-            const count = acc.count * comps;
-            const TypedArray = { 5120: Int8Array, 5121: Uint8Array, 5122: Int16Array, 5123: Uint16Array, 5125: Uint32Array, 5126: Float32Array }[acc.componentType];
-            if (!TypedArray) return null;
-            if (stride === 0 || stride === comps * TypedArray.BYTES_PER_ELEMENT) { return new TypedArray(bin, offset, count); }
-            else {
-                const result = new TypedArray(count);
-                const dataView = new DataView(bin);
-                for (let i = 0; i < acc.count; i++) {
-                    const elOffset = offset + i * stride;
-                    for (let j = 0; j < comps; j++) {
-                        const byteOffset = elOffset + j * TypedArray.BYTES_PER_ELEMENT;
-                        if (acc.componentType === 5126) result[i * comps + j] = dataView.getFloat32(byteOffset, true);
-                        else if (acc.componentType === 5123) result[i * comps + j] = dataView.getUint16(byteOffset, true);
-                        else if (acc.componentType === 5121) result[i * comps + j] = dataView.getUint8(byteOffset);
-                    }
-                }
-                return result;
-            }
         }
         parseScene(args) {
             try {
@@ -593,6 +652,47 @@
                 out.push(...Array.from(mat));
             });
             return JSON.stringify(this._lp(out));
+        }
+        getMeshInfoToList(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            if (!m || !m.renderables || !m.renderables[Math.floor(args.MSI)]) return;
+            const r = m.renderables[Math.floor(args.MSI)];
+
+            let infoKey = args.INFO;
+            // 处理别名映射
+            if (infoKey === 'bone_indices') infoKey = 'node_indices';
+            if (infoKey === 'bone_weights') infoKey = 'node_weights';
+
+            let data = [];
+            if (infoKey === 'name') data = r.name;
+            else if (infoKey === 'material_name') data = r.mat;
+            else if (infoKey === 'texture_name') data = r.tex;
+            else if (r.geo && r.geo[infoKey]) {
+                data = r.geo[infoKey]; // 这里拿到 position, uv 等数组
+            }
+
+            this._setList(args.LIST, data);
+        }
+
+        getSkinningMatricesToList(args) {
+            const m = models[modelOrder[Math.floor(args.MI)]];
+            if (!m || !m.renderables || !m.renderables[Math.floor(args.MSI)]) return;
+            const r = m.renderables[Math.floor(args.MSI)];
+
+            const count = r.handles.length * 16;
+            const out = new Float32Array(count);
+            const isOriginal = (args.TYPE === '初始' || args.TYPE === 'original');
+
+            r.handles.forEach((idx, i) => {
+                const node = m.nodes[idx];
+                if (!node) return;
+                let mat = r.isSkinned ?
+                    (isOriginal ? m4.multiply(node.bindWorld, node.invBindWorld) : node.skinMatrix) :
+                    (isOriginal ? node.bindWorld : node.world);
+                out.set(mat, i * 16);
+            });
+
+            this._setList(args.LIST, out);
         }
 
         // -----------------------------Node--------------------------------

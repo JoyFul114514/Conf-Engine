@@ -3,7 +3,7 @@
 // Description: Better GLB loader
 // By: Joy_Ful <https://github.com/JoyFul114514>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.4.7 - Added Direct List Injection
+// Version: 1.4.7.2 - Added Direct List Injection & Bug Fixed
 (function (Scratch) {
     'use strict';
     const D2R = Math.PI / 180;
@@ -152,43 +152,50 @@
             }
         }
         _getAllLists() {
-            const vm = Scratch.vm;
-            if (!vm) return [' '];
-            const lists = new Set(); // 使用 Set 去重
-            vm.runtime.targets.forEach(target => { // 遍历所有角色和舞台，收集所有列表名
-                for (const id in target.variables) {
-                    const v = target.variables[id];
-                    if (v.type === 'list') {
-                        lists.add(v.name);
+            try {
+                const vm = Scratch.vm;
+                if (!vm || !vm.runtime || !vm.runtime.targets) return [' '];
+
+                const lists = new Set();
+                vm.runtime.targets.forEach(target => {
+                    if (target && target.variables) {
+                        for (const id in target.variables) {
+                            const v = target.variables[id];
+                            if (v && v.type === 'list') {
+                                lists.add(v.name);
+                            }
+                        }
                     }
-                }
-            });
-            const result = Array.from(lists);
-            return result.length > 0 ? result : [' '];
+                });
+
+                const result = Array.from(lists);
+                return result.length > 0 ? result : [' '];
+            } catch (e) {
+                // 如果 vm 被篡改导致报错，返回一个默认值，防止编辑器崩溃，神笔ccw
+                return ['error_getting_lists'];
+            }
         }
-        _setList(listName, data) {
-            const vm = Scratch.vm;
-            if (!vm || data === undefined || data === null) return;
+        _setList(listName, data, util) {
+            if (!util || !listName) return;
 
             let variable = null;
-            const stage = vm.runtime.getTargetForStage();
-            const editingTarget = vm.runtime.getEditingTarget();
-            // 在当前选中的角色中找
-            if (editingTarget) {
-                variable = editingTarget.lookupVariableByNameAndType(listName, 'list');
+            const stage = util.runtime.getTargetForStage();
+            const currentTarget = util.target;
+
+            // 优先在当前角色中找
+            if (currentTarget) {
+                variable = currentTarget.lookupVariableByNameAndType(listName, 'list');
             }
+
             // 如果没找到，在舞台找
             if (!variable && stage) {
                 variable = stage.lookupVariableByNameAndType(listName, 'list');
             }
-            // 如果还是没找到，遍历所有角色找这个名字的私有列表，但是测试出来还是不能写入私有变量，诡异
+
+            // 跨角色搜索
             if (!variable) {
-                const allTargets = vm.runtime.targets;
-                for (let i = 0; i < allTargets.length; i++) {
-                    const target = allTargets[i];
-                    // lookupVariableByNameAndType 会检查该角色自身及其私有变量
+                for (const target of util.runtime.targets) {
                     const found = target.lookupVariableByNameAndType(listName, 'list');
-                    // 确保匹配
                     if (found && found.name === listName) {
                         variable = found;
                         break;
@@ -197,14 +204,14 @@
             }
 
             if (variable) {
-                if (Array.isArray(data) || (data.buffer && data.buffer instanceof ArrayBuffer)) {
+                if (data === null || data === undefined) {
+                    variable.value = [];
+                } else if (Array.isArray(data) || (data.buffer && data.buffer instanceof ArrayBuffer)) {
                     variable.value = Array.from(data).map(x => typeof x === 'number' ? Math.round(x * 1000000) / 1000000 : x);
                 } else {
                     variable.value = [String(data)];
                 }
                 variable._monitorUpToDate = false;
-            } else {
-                console.warn(`OmniGLB: 找不到列表 "${listName}"`);
             }
         }
 
@@ -653,13 +660,12 @@
             });
             return JSON.stringify(this._lp(out));
         }
-        getMeshInfoToList(args) {
+        getMeshInfoToList(args, util) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             if (!m || !m.renderables || !m.renderables[Math.floor(args.MSI)]) return;
             const r = m.renderables[Math.floor(args.MSI)];
 
             let infoKey = args.INFO;
-            // 处理别名映射
             if (infoKey === 'bone_indices') infoKey = 'node_indices';
             if (infoKey === 'bone_weights') infoKey = 'node_weights';
 
@@ -668,19 +674,18 @@
             else if (infoKey === 'material_name') data = r.mat;
             else if (infoKey === 'texture_name') data = r.tex;
             else if (r.geo && r.geo[infoKey]) {
-                data = r.geo[infoKey]; // 这里拿到 position, uv 等数组
+                data = r.geo[infoKey];
             }
 
-            this._setList(args.LIST, data);
+            this._setList(args.LIST, data, util); // 传递 utll
         }
 
-        getSkinningMatricesToList(args) {
+        getSkinningMatricesToList(args, util) {
             const m = models[modelOrder[Math.floor(args.MI)]];
             if (!m || !m.renderables || !m.renderables[Math.floor(args.MSI)]) return;
             const r = m.renderables[Math.floor(args.MSI)];
 
-            const count = r.handles.length * 16;
-            const out = new Float32Array(count);
+            const out = new Float32Array(r.handles.length * 16);
             const isOriginal = (args.TYPE === '初始' || args.TYPE === 'original');
 
             r.handles.forEach((idx, i) => {
@@ -692,7 +697,7 @@
                 out.set(mat, i * 16);
             });
 
-            this._setList(args.LIST, out);
+            this._setList(args.LIST, out, util);
         }
 
         // -----------------------------Node--------------------------------
